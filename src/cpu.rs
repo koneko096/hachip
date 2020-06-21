@@ -1,4 +1,4 @@
-use crate::emulate_cycle_error::EmulateCycleError;
+use crate::errors::EmulateCycleError;
 use crate::keypad::Keypad;
 use crate::ppu::{Display, FONT_SET};
 use log;

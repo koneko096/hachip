@@ -10,14 +10,13 @@ use std::io::{Read, Result};
 use crate::cpu::Cpu;
 use sdl2::Sdl;
 use crate::ppu::CanvasWindow;
-use std::{thread, time};
+use std::{thread, time, env};
+use crate::errors::EmulateCycleError;
 
 mod cpu;
 mod keypad;
 mod ppu;
-mod emulate_cycle_error;
-
-const ROM: &'static str = "roms/WIPEOFF";
+mod errors;
 
 fn main() {
     env_logger::init();
@@ -44,7 +43,10 @@ fn main() {
     let sdl = sdl2::init().unwrap();
     let canvas = get_canvas(&sdl);
     let mut event_pump = sdl.event_pump().unwrap();
-    let mut cpu = init_cpu(canvas);
+    let mut cpu = match init_cpu(canvas) {
+        Ok(cpu) => cpu,
+        Err(error) => panic!("Problem initiating cpu: {:?}", error),
+    };
 
     'main: loop {
         for event in event_pump.poll_iter() {
@@ -71,13 +73,20 @@ fn main() {
     }
 }
 
-fn init_cpu(canvas: Canvas<Window>) -> Cpu {
+fn init_cpu(canvas: Canvas<Window>) -> Result<Cpu> {
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        panic!("Invalid argument: no ROM specified")
+    }
+
+    let rom = args.get(1).unwrap();
     let ppu = ppu::Ppu::new(Box::new(CanvasWindow::new(canvas)));
     let mut cpu = cpu::Cpu::new(Box::new(ppu));
-    let game = open_rom(ROM).unwrap();
+    let game = open_rom(rom).unwrap();
     cpu.reset();
     cpu.load(game);
-    return cpu;
+
+    Result::Ok(cpu)
 }
 
 fn open_rom(file_name: &str) -> Result<Vec<u8>> {
