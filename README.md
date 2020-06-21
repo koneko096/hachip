@@ -13,7 +13,7 @@ cargo build --release
 ```
 and then run the binary on target
 ```shell script
-./target/release/hachip (Unix)
+./target/release/hachip <rom path> (Unix)
 or
-target\release\hachip (Windows)
+target\release\hachip <rom path> (Windows)
 ```
