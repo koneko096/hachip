@@ -9,5 +9,17 @@ rust:
 jobs:
   fast_finish: true
 
+stages:
+  - install
+  - build
+  - package
+
 cache: cargo
 
+build:
+  - cargo test --verbose
+  - cargo build --release --verbose  
+
+package:
+  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then ls target/release -al; fi
+  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then ls target/release -al; fi
