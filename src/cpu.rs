@@ -81,6 +81,11 @@ impl Cpu {
                 self.display.cls();
                 self.pc += 2;
             }
+            0x1000 ..= 0x1FFF => {
+                // 1nnn - JP addr
+                // Jump to location nnn.
+                self.pc = opcode & 0x0FFF;
+            },
             0x00EE => {
                 // 00EE - RET
                 // Return from a subroutine.
@@ -88,25 +93,19 @@ impl Cpu {
                 println!("sp: {:X}", self.sp);
                 println!("val: {:X}", self.stack[self.sp as usize]);
 
-                self.pc = self.stack[self.sp as usize];
-                self.pc += 2;
-
-                self.stack[self.sp as usize] = 0xBEEF;
                 self.sp -= 1;
-            },
-            0x1000 ..= 0x1FFF => {
-                // 1nnn - JP addr
-                // Jump to location nnn.
-                self.pc = opcode & 0x0FFF;
+                self.pc = self.stack[self.sp as usize];
+                self.stack[self.sp as usize] = 0xBEEF;
+                self.pc += 2;
             },
             0x2000 ..= 0x2FFF => {
                 // 2nnn - CALL addr
                 // Call subroutine at nnn.
                 // Increment the stack pointer, put the current program counter on the top of the stack,
                 // then the program counter is then set to nnn.
-                self.sp += 1;
                 self.stack[self.sp as usize] = self.pc;
                 self.pc = opcode & 0x0FFF;
+                self.sp += 1;
 
                 // TODO better error handling if there was a stack overflow?
                 println!("call subroutine at {:X}", opcode);
@@ -440,7 +439,7 @@ mod tests {
             false
         }
 
-        fn set_pixel(&mut self, x: usize, y: usize, on: bool) {}
+        fn set_pixel(&mut self, x: usize, y: usize, on: u8) {}
 
         fn get_pixel(&mut self, x: usize, y: usize) -> bool {
             false
@@ -468,7 +467,7 @@ mod tests {
 
         assert_eq!(cpu.pc, 0x0ABC, "the program counter is updated to the new address");
         assert_eq!(cpu.sp, 1, "the stack pointer is incremented");
-        assert_eq!(cpu.stack[0], addr + 2, "the stack stores the previous address");
+        assert_eq!(cpu.stack[0], addr, "the stack stores the previous address");
     }
 
     #[test]

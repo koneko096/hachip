@@ -156,7 +156,7 @@ mod tests {
     fn set_pixel() {
         let mut Ppu = Ppu::new(make_pixel_grid());
 
-        Ppu.set_pixel(1, 1, true);
+        Ppu.set_pixel(1, 1, 1);
 
         assert_eq!(true, Ppu.get_pixel(1, 1));
     }
@@ -165,7 +165,7 @@ mod tests {
     fn cls() {
         let mut Ppu = Ppu::new(make_pixel_grid());
 
-        Ppu.set_pixel(1, 1, true);
+        Ppu.set_pixel(1, 1, 1);
         Ppu.cls();
 
         assert_eq!(false, Ppu.get_pixel(1, 1));
