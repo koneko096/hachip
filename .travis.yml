@@ -15,4 +15,4 @@ after_script:
   - cargo build --release --verbose
   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then ls target/release -al; fi
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then ls target/release -al; fi
-  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then dir target\release; fi
+  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then dir target\\release; fi
