@@ -1,0 +1,27 @@
+name: Build and test
+
+# Controls when the action will run.
+on:
+  # Triggers the workflow on push and pull request events
+  push:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+          - os: windows-latest
+          - os: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --verbose
