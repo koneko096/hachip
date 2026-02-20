@@ -1,12 +1,9 @@
-name: Build and test
+name: Build binary
 
-# Controls when the action will run.
 on:
-  # Triggers the workflow on push and pull request events
   push:
-  # Allows you to run this workflow manually from the Actions tab
+    branches: ["master"]
   workflow_dispatch:
-
 
 jobs:
   build:
@@ -19,14 +16,11 @@ jobs:
           - os: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
-      
-      
+      - name: Checkout
+        uses: actions/checkout@v4
+      - run: rustup update
       - name: Setup VS (Windows)
         uses: microsoft/setup-msbuild@v1.1
         if: matrix.os == 'windows-latest'
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --verbose
+      - name: Build
+        run: cargo build --release --verbose

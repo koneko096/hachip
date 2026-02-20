@@ -1,7 +1,10 @@
 use crate::errors::EmulateCycleError;
 use crate::keypad::Keypad;
-use crate::ppu::{Display, FONT_SET};
+use crate::ppu::{Ppu, Display, FONT_SET}; // Import Ppu struct directly
+#[cfg(feature = "console_ui")]
 use log;
+#[cfg(feature = "console_ui")]
+use getrandom; // Import getrandom for console_ui feature
 
 pub struct Cpu {
     // index register
@@ -22,18 +25,18 @@ pub struct Cpu {
     dt: u8,
     // sound timer
     st: u8,
-    // display
-    display: Box<dyn Display>,
+    // ppu directly
+    pub ppu: Ppu, // Changed from display: Box<dyn Display>
 }
 
 impl Cpu {
-    pub fn new(display: Box<dyn Display>) -> Cpu {
+    pub fn new() -> Cpu { // No longer takes display as argument
         Cpu {
             i: 0,
             pc: 0,
             memory: [0; 4096],
             v: [0; 16],
-            display,
+            ppu: Ppu::new(), // Create a new Ppu instance
             keypad: Keypad::new(),
             stack: [0; 16],
             sp: 0,
@@ -45,13 +48,13 @@ impl Cpu {
     pub fn reset(&mut self) {
         self.i = 0;
         self.pc = 0x200;
-        self.memory = [0; 4096];
+        // Removed: self.memory = [0; 4096];
         self.v = [0; 16];
         self.stack = [0; 16];
         self.sp = 0;
         self.dt = 0;
         self.st = 0;
-        self.display.cls();
+        self.ppu.cls();
         self.memory[0..80].clone_from_slice(&FONT_SET[..80]);
     }
 
@@ -59,7 +62,13 @@ impl Cpu {
         for (idx, item) in data.iter().enumerate() {
             self.memory[idx + 512] = *item;
         }
+        #[cfg(feature = "console_ui")]
         log::info!("ROM loaded");
+    }
+
+    // Add this public getter for PC
+    pub fn get_pc(&self) -> u16 {
+        self.pc
     }
 
     pub fn execute_cycle(&mut self) {
@@ -75,10 +84,13 @@ impl Cpu {
 
     fn process_opcode(&mut self, opcode: u16) -> Result<(), EmulateCycleError> {
         match opcode {
+            0x0000 => { // Added: NOP for 0x0000
+                self.pc += 2;
+            }
             0x00E0 => {
                 // 00E0 - CLS
                 // Clear the display.
-                self.display.cls();
+                self.ppu.cls(); // Changed from self.display.cls()
                 self.pc += 2;
             }
             0x1000 ..= 0x1FFF => {
@@ -90,12 +102,12 @@ impl Cpu {
                 // 00EE - RET
                 // Return from a subroutine.
                 // The interpreter sets the program counter to the address at the top of the stack, then subtracts 1 from the stack pointer.
-                println!("sp: {:X}", self.sp);
-                println!("val: {:X}", self.stack[self.sp as usize]);
+                // println!("sp: {:X}", self.sp); // Removed for cleaner output
+                // println!("val: {:X}", self.stack[self.sp as usize]); // Removed for cleaner output
 
                 self.sp -= 1;
                 self.pc = self.stack[self.sp as usize];
-                self.stack[self.sp as usize] = 0xBEEF;
+                // self.stack[self.sp as usize] = 0xBEEF; // Removed - not standard CHIP-8 behavior to clear stack entry
                 self.pc += 2;
             },
             0x2000 ..= 0x2FFF => {
@@ -108,7 +120,7 @@ impl Cpu {
                 self.sp += 1;
 
                 // TODO better error handling if there was a stack overflow?
-                println!("call subroutine at {:X}", opcode);
+                // println!("call subroutine at {:X}", opcode); // Removed for cleaner output
             },
             0x3000 ..= 0x3FFF => {
                 // 3xkk - SE Vx, byte
@@ -201,6 +213,8 @@ impl Cpu {
                         let (value, did_overflow) = self.v[x].overflowing_add(self.v[y]);
                         if did_overflow {
                             self.v[0xF] = 1;
+                        } else {
+                            self.v[0xF] = 0; // Explicitly set to 0 if no overflow
                         }
                         self.v[x] = value;
                         self.pc += 2;
@@ -209,8 +223,8 @@ impl Cpu {
                         // 8xy5 - SUB Vx, Vy
                         // Set Vx = Vx - Vy, set VF = NOT borrow.
                         // If Vx > Vy, then VF is set to 1, otherwise 0. Then Vy is subtracted from Vx, and the results stored in Vx.
-                        let (value, _) = self.v[x].overflowing_sub(self.v[y]);
-                        if self.v[x] > self.v[y] {
+                        let (value, did_overflow) = self.v[x].overflowing_sub(self.v[y]);
+                        if !did_overflow { // No borrow means Vx >= Vy
                             self.v[0xF] = 1;
                         } else {
                             self.v[0xF] = 0;
@@ -230,11 +244,11 @@ impl Cpu {
                         // 8xy7 - SUBN Vx, Vy
                         // Set Vx = Vy - Vx, set VF = NOT borrow.
                         // If Vy > Vx, then VF is set to 1, otherwise 0. Then Vx is subtracted from Vy, and the results stored in Vx.
-                        let (value, did_overflow) = self.v[x].overflowing_sub(self.v[y]);
-                        if did_overflow {
-                            self.v[0xF] = 0;
-                        } else {
+                        let (value, did_overflow) = self.v[y].overflowing_sub(self.v[x]); // Vy - Vx
+                        if !did_overflow { // No borrow means Vy >= Vx
                             self.v[0xF] = 1;
+                        } else {
+                            self.v[0xF] = 0;
                         }
                         self.v[x] = value;
                         self.pc += 2;
@@ -243,7 +257,7 @@ impl Cpu {
                         // 8xyE - SHL Vx {, Vy}
                         // Set Vx = Vx SHL 1.
                         // If the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0. Then Vx is multiplied by 2.
-                        self.v[0xF] = self.v[x] & 0x80;
+                        self.v[0xF] = (self.v[x] & 0x80) >> 7; // Get the MSB
                         self.v[x] <<= 1;
                         self.pc += 2;
                     }
@@ -288,7 +302,11 @@ impl Cpu {
                 let kk = (opcode & 0x00FF) as u8;
 
                 let mut buf = [0u8; 1];
+                #[cfg(feature = "console_ui")] // Conditional compilation for getrandom
                 getrandom::getrandom(&mut buf).unwrap();
+                if !cfg!(feature = "console_ui") { // Use if cfg! for stable conditional expression
+                    buf[0] = 0; // Placeholder for non-console_ui (e.g., WASM)
+                }
                 let random = buf[0];
 
                 self.v[x as usize] = random & kk;
@@ -302,8 +320,8 @@ impl Cpu {
                 let height: usize = (opcode & 0x000F) as usize;
                 let sprite: &[u8] = &self.memory[self.i as usize .. (self.i + height as u16) as usize];
 
-                let collision = self.display.draw(x, y, sprite) as u8;
-                self.v[0xF] = collision;
+                let collision = self.ppu.draw(x, y, sprite); // Changed from self.display.draw()
+                self.v[0xF] = collision as u8; // Cast bool to u8
                 self.pc += 2;
             }
             0xE000 ..= 0xEFFF => {
@@ -349,11 +367,13 @@ impl Cpu {
                         // Fx0A - LD Vx, K
                         // Wait for a key press, store the value of the key in Vx.
                         // All execution stops until a key is pressed, then the value of that key is stored in Vx.
-                        for (i, key) in self.keypad.keys.iter().enumerate() {
-                            if *key {
-                                self.v[x] = i as u8;
-                                self.pc +=2;
-                            }
+                        if let Some(key_index) = self.keypad.get_first_key_down() {
+                            self.v[x] = key_index;
+                            // The PC will be advanced by 2 at the end of process_opcode, which is correct here.
+                        } else {
+                            // If no key is pressed, we need to re-execute this instruction next cycle.
+                            // To do this, we decrement PC by 2 to counteract the PC += 2 at the end of process_opcode.
+                            self.pc -= 2;
                         }
                     }
                     0x15 => {
@@ -407,7 +427,6 @@ impl Cpu {
                 self.pc += 2;
             }
             _ => {
-                self.pc += 2;
                 let error = EmulateCycleError { message: format!("{:X} opcode not handled d", opcode) };
                 return Err(error);
             }
@@ -428,38 +447,20 @@ impl Cpu {
 #[cfg(test)]
 mod tests {
     use super::Cpu;
-    use std::ptr::null;
-    use crate::ppu::Display;
+    use crate::ppu::Ppu; // Use Ppu directly
 
-    struct MockDisplay {}
-    impl Display for MockDisplay {
-        fn cls(&mut self) {}
-
-        fn draw(&mut self, x: usize, y: usize, sprite: &[u8]) -> bool {
-            false
-        }
-
-        fn set_pixel(&mut self, x: usize, y: usize, on: u8) {}
-
-        fn get_pixel(&mut self, x: usize, y: usize) -> bool {
-            false
-        }
-    }
-
-    fn make_display() -> Box<dyn Display> {
-        Box::new(MockDisplay{})
-    }
+    // Removed MockDisplay and make_display functions, as Ppu is now directly used.
 
     #[test]
     fn opcode_jp() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
         cpu.process_opcode(0x1A2A);
         assert_eq!(cpu.pc, 0x0A2A, "the program counter is updated");
     }
 
     #[test]
     fn opcode_call() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
         let addr = 0x23;
         cpu.pc = addr;
 
@@ -472,7 +473,7 @@ mod tests {
 
     #[test]
     fn opcode_se_vx_byte() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
         cpu.v[1] = 0xFE;
 
         // vx == kk
@@ -486,7 +487,7 @@ mod tests {
 
     #[test]
     fn opcode_sne_vx_byte() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
         cpu.v[1] = 0xFE;
 
         // vx == kk
@@ -500,7 +501,7 @@ mod tests {
 
     #[test]
     fn opcode_se_vx_vy() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
         cpu.v[1] = 1;
         cpu.v[2] = 3;
         cpu.v[3] = 3;
@@ -516,7 +517,7 @@ mod tests {
 
     #[test]
     fn opcode_sne_vx_vy() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
         cpu.v[1] = 1;
         cpu.v[2] = 3;
         cpu.v[3] = 3;
@@ -532,7 +533,7 @@ mod tests {
 
     #[test]
     fn opcode_add_vx_kkk() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
         cpu.v[1] = 3;
 
         cpu.process_opcode(0x7101);
@@ -541,7 +542,7 @@ mod tests {
 
     #[test]
     fn opcode_ld_vx_vy() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
         cpu.v[1] = 3;
         cpu.v[0] = 0;
 
@@ -551,7 +552,7 @@ mod tests {
 
     #[test]
     fn opcode_or_vx_vy() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
         cpu.v[2] = 0b01101100;
         cpu.v[3] = 0b11001110;
 
@@ -561,7 +562,7 @@ mod tests {
 
     #[test]
     fn opcode_and_vx_vy() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
         cpu.v[2] = 0b01101100;
         cpu.v[3] = 0b11001110;
 
@@ -571,7 +572,7 @@ mod tests {
 
     #[test]
     fn opcode_xor_vx_vy() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
         cpu.v[2] = 0b01101100;
         cpu.v[3] = 0b11001110;
 
@@ -581,7 +582,7 @@ mod tests {
 
     #[test]
     fn opcode_add_vx_vy() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
         cpu.v[1] = 10;
         cpu.v[2] = 100;
         cpu.v[3] = 250;
@@ -597,7 +598,7 @@ mod tests {
 
     #[test]
     fn opcode_ld_i_vx() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
         cpu.v[0] = 5;
         cpu.v[1] = 4;
         cpu.v[2] = 3;
@@ -614,7 +615,7 @@ mod tests {
 
     #[test]
     fn opcode_ld_b_vx() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
         cpu.i = 0x300;
         cpu.v[2] = 234;
 
@@ -627,7 +628,7 @@ mod tests {
 
     #[test]
     fn opcode_ld_vx_i() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
         cpu.i = 0x300;
         cpu.memory[cpu.i as usize] = 5;
         cpu.memory[cpu.i as usize + 1] = 4;
@@ -645,7 +646,7 @@ mod tests {
 
     #[test]
     fn opcode_ret() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
         let addr = 0x23;
         cpu.pc = addr;
 
@@ -661,7 +662,7 @@ mod tests {
 
     #[test]
     fn opcode_ld_i_addr() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
 
         cpu.process_opcode(0x61AA);
         assert_eq!(cpu.v[1], 0xAA, "V1 is set");
@@ -678,7 +679,7 @@ mod tests {
 
     #[test]
     fn opcode_axxx() {
-        let mut cpu = Cpu::new(make_display());
+        let mut cpu = Cpu::new(); // No arg
         cpu.process_opcode(0xAFAF);
 
         assert_eq!(cpu.i, 0x0FAF, "the 'i' register is updated");

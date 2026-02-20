@@ -1,73 +1,50 @@
-use sdl2::pixels::Color;
-use sdl2::rect::Rect;
-use sdl2::render::Canvas;
-use sdl2::video::Window;
+// No sdl2 imports here anymore
 
-const WIDTH: usize = 64;
-const HEIGHT: usize = 32;
+pub const WIDTH: usize = 64;
+pub const HEIGHT: usize = 32;
 
 pub const FRAME_WIDTH: u32 = 640;
 pub const FRAME_HEIGHT: u32 = 320;
 
-const FACTOR: usize = 10;
+pub const FACTOR: usize = 10; // FACTOR needs to be public for console_ui
 
-pub trait PixelGrid {
-    fn set_draw_color(&mut self, color: Color);
-    fn clear(&mut self);
-    fn present(&mut self);
-    fn fill_rect(&mut self, rect: Rect) -> Result<(), String>;
-}
-pub struct CanvasWindow {
-    canvas: Canvas<Window>
-}
-impl CanvasWindow {
-    pub fn new(canvas: Canvas<Window>) -> CanvasWindow {
-        CanvasWindow {
-            canvas
-        }
-    }
-}
-impl PixelGrid for CanvasWindow {
-    fn set_draw_color(&mut self, color: Color) {
-        self.canvas.set_draw_color(color);
-    }
-    fn clear(&mut self) {
-        self.canvas.clear();
-    }
-    fn present(&mut self) {
-        self.canvas.present();
-    }
-    fn fill_rect(&mut self, rect: Rect) -> Result<(), String> {
-        self.canvas.fill_rect(rect)
-    }
-}
+// Removed PixelGrid trait and CanvasWindow struct from here
 
 pub trait Display {
     fn cls(&mut self);
     fn draw(&mut self, x: usize, y: usize, sprite: &[u8]) -> bool;
     fn set_pixel(&mut self, x: usize, y: usize, val: u8);
-    fn get_pixel(&mut self, x: usize, y: usize) -> bool;
+    fn get_pixel(&self, x: usize, y: usize) -> bool; // get_pixel can be immutable
 }
+
 pub struct Ppu {
-    memory: [u8; 2048],
-    canvas: Box<dyn PixelGrid>
+    memory: [u8; WIDTH * HEIGHT], // Use WIDTH * HEIGHT for clarity
+    display_updated: bool, // New flag to signal updates
 }
+
 impl Ppu {
-    pub fn new(canvas: Box<dyn PixelGrid>) -> Ppu {
+    pub fn new() -> Ppu { // No longer takes PixelGrid
         Ppu {
-            memory: [0; 2048],
-            canvas,
+            memory: [0; WIDTH * HEIGHT],
+            display_updated: false,
         }
+    }
+
+    pub fn get_display_memory(&self) -> &[u8] {
+        &self.memory
+    }
+
+    pub fn take_display_update_flag(&mut self) -> bool {
+        let updated = self.display_updated;
+        self.display_updated = false; // Reset the flag after being read
+        updated
     }
 }
 
 impl Display for Ppu {
     fn cls(&mut self) {
-        self.memory = [0; 2048];
-        let black = Color::RGB(0, 0, 0);
-        self.canvas.set_draw_color(black);
-        self.canvas.clear();
-        self.canvas.present();
+        self.memory.iter_mut().for_each(|x| *x = 0); // Clear memory efficiently
+        self.display_updated = true;
     }
 
     fn draw(&mut self, x: usize, y: usize, sprite: &[u8]) -> bool {
@@ -80,35 +57,36 @@ impl Display for Ppu {
                 if new_value == 1 {
                     let xi = (x + i) % WIDTH;
                     let yj = (y + j) % HEIGHT;
-                    let old_value = self.get_pixel(xi, yj);
+                    let old_value = self.get_pixel(xi, yj); // Use immutable get_pixel
                     if old_value {
                         collision = true;
                     }
                     let display_value = ((new_value == 1) ^ old_value) as u8;
-                    self.set_pixel(xi, yj, display_value);
+                    self.set_pixel(xi, yj, display_value); // set_pixel will mark display_updated
                 }
             }
         }
-        self.canvas.present();
+        // display_updated is already set by set_pixel if any pixel changed
         return collision;
     }
 
     fn set_pixel(&mut self, x: usize, y: usize, val: u8) {
-        self.memory[x + y * WIDTH] = val;
-        let col = if val == 1
-            { Color::RGB(255, 255, 255) }
-            else
-            { Color::RGB(0, 0, 0) };
-        self.canvas.set_draw_color(col);
-        self.canvas.fill_rect(Rect::new(
-            (x * FACTOR) as i32,
-            (y * FACTOR) as i32,
-            FACTOR as u32,
-            FACTOR as u32)).unwrap();
+        let index = x + y * WIDTH;
+        if index < self.memory.len() { // Boundary check
+            if self.memory[index] != val { // Only mark as updated if value actually changes
+                self.memory[index] = val;
+                self.display_updated = true;
+            }
+        }
     }
 
-    fn get_pixel(&mut self, x: usize, y: usize) -> bool {
-        self.memory[x + y * WIDTH] == 1
+    fn get_pixel(&self, x: usize, y: usize) -> bool {
+        let index = x + y * WIDTH;
+        if index < self.memory.len() { // Boundary check
+            self.memory[index] == 1
+        } else {
+            false // Or handle error
+        }
     }
 }
 
@@ -133,85 +111,70 @@ pub static FONT_SET: [u8; 80] = [
 
 #[cfg(test)]
 mod tests {
-    use super::Ppu;
-    use crate::ppu::{PixelGrid, Display};
-    use sdl2::pixels::Color;
-    use sdl2::rect::Rect;
+    use super::{Ppu, Display, WIDTH, HEIGHT};
 
-    pub struct PixelGridMock {}
-    impl PixelGrid for PixelGridMock {
-        fn set_draw_color(&mut self, color: Color) {}
-        fn clear(&mut self) {}
-        fn present(&mut self) {}
-        fn fill_rect(&mut self, rect: Rect) -> Result<(), String> {
-            Result::Ok(())
-        }
-    }
-    
-    fn make_pixel_grid() -> Box<dyn PixelGrid> {
-        Box::new(PixelGridMock{})
-    }
+    // No more PixelGridMock needed in ppu.rs tests
 
     #[test]
     fn set_pixel() {
-        let mut Ppu = Ppu::new(make_pixel_grid());
-
-        Ppu.set_pixel(1, 1, 1);
-
-        assert_eq!(true, Ppu.get_pixel(1, 1));
+        let mut ppu = Ppu::new(); // No arg
+        ppu.set_pixel(1, 1, 1);
+        assert_eq!(true, ppu.get_pixel(1, 1));
+        assert_eq!(ppu.display_updated, true);
     }
 
     #[test]
     fn cls() {
-        let mut Ppu = Ppu::new(make_pixel_grid());
-
-        Ppu.set_pixel(1, 1, 1);
-        Ppu.cls();
-
-        assert_eq!(false, Ppu.get_pixel(1, 1));
+        let mut ppu = Ppu::new(); // No arg
+        ppu.set_pixel(1, 1, 1);
+        ppu.display_updated = false; // Reset for testing cls
+        ppu.cls();
+        assert_eq!(false, ppu.get_pixel(1, 1));
+        assert_eq!(ppu.display_updated, true);
     }
 
     #[test]
     fn draw() {
-        let mut Ppu = Ppu::new(make_pixel_grid());
-
+        let mut ppu = Ppu::new(); // No arg
         let sprite: [u8; 2] = [0b00110011, 0b11001010];
+        ppu.draw(0, 0, &sprite);
 
-        Ppu.draw(0, 0, &sprite);
+        assert_eq!(false, ppu.get_pixel(0, 0));
+        assert_eq!(false, ppu.get_pixel(1, 0));
+        assert_eq!(true, ppu.get_pixel(2, 0));
+        assert_eq!(true, ppu.get_pixel(3, 0));
+        assert_eq!(false, ppu.get_pixel(4, 0));
+        assert_eq!(false, ppu.get_pixel(5, 0));
+        assert_eq!(true, ppu.get_pixel(6, 0));
+        assert_eq!(true, ppu.get_pixel(7, 0));
 
-        assert_eq!(false, Ppu.get_pixel(0, 0));
-        assert_eq!(false, Ppu.get_pixel(1, 0));
-        assert_eq!(true, Ppu.get_pixel(2, 0));
-        assert_eq!(true, Ppu.get_pixel(3, 0));
-        assert_eq!(false, Ppu.get_pixel(4, 0));
-        assert_eq!(false, Ppu.get_pixel(5, 0));
-        assert_eq!(true, Ppu.get_pixel(6, 0));
-        assert_eq!(true, Ppu.get_pixel(7, 0));
-
-        assert_eq!(true, Ppu.get_pixel(0, 1));
-        assert_eq!(true, Ppu.get_pixel(1, 1));
-        assert_eq!(false, Ppu.get_pixel(2, 1));
-        assert_eq!(false, Ppu.get_pixel(3, 1));
-        assert_eq!(true, Ppu.get_pixel(4, 1));
-        assert_eq!(false, Ppu.get_pixel(5, 1));
-        assert_eq!(true, Ppu.get_pixel(6, 1));
-        assert_eq!(false, Ppu.get_pixel(7, 1));
+        assert_eq!(true, ppu.get_pixel(0, 1));
+        assert_eq!(true, ppu.get_pixel(1, 1));
+        assert_eq!(false, ppu.get_pixel(2, 1));
+        assert_eq!(false, ppu.get_pixel(3, 1));
+        assert_eq!(true, ppu.get_pixel(4, 1));
+        assert_eq!(false, ppu.get_pixel(5, 1));
+        assert_eq!(true, ppu.get_pixel(6, 1));
+        assert_eq!(false, ppu.get_pixel(7, 1));
     }
 
     #[test]
     fn draw_detects_collisions() {
-        let mut Ppu = Ppu::new(make_pixel_grid());
+        let mut ppu = Ppu::new();
 
-        let mut sprite: [u8; 1] = [0b00110000];
-        let mut collision = Ppu.draw(0, 0, &sprite);
-        assert_eq!(false, collision);
+        // Draw a sprite, no collision initially
+        let sprite1: [u8; 1] = [0b11000000];
+        let collision1 = ppu.draw(0, 0, &sprite1);
+        assert_eq!(false, collision1);
+        assert_eq!(ppu.get_pixel(0, 0), true);
+        assert_eq!(ppu.get_pixel(1, 0), true);
 
-        sprite = [0b00000011];
-        collision = Ppu.draw(0, 0, &sprite);
-        assert_eq!(false, collision);
-
-        sprite = [0b00000001];
-        collision = Ppu.draw(0, 0, &sprite);
-        assert_eq!(true, collision);
+        // Draw another sprite that overlaps, causing a collision
+        let sprite2: [u8; 1] = [0b01100000]; // Overlaps at (1,0)
+        let collision2 = ppu.draw(0, 0, &sprite2);
+        assert_eq!(true, collision2); // Collision should be true
+        assert_eq!(ppu.get_pixel(0, 0), true); // (0,0) remains on (sprite1)
+        assert_eq!(ppu.get_pixel(1, 0), false); // (1,0) turned off (XOR with sprite2)
+        assert_eq!(ppu.get_pixel(2, 0), true); // (2,0) turned on (sprite2)
     }
 }

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>hachip WASM Emulator</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background-color: #222;
+        color: #eee;
+        margin: 0;
+      }
+      canvas {
+        border: 2px solid #555;
+        image-rendering: pixelated; /* For sharp pixels */
+        width: 640px;   /* Scaled display width */
+        height: 320px;  /* Scaled display height */
+      }
+      #controls {
+        margin-top: 20px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      input[type="file"] {
+        padding: 5px;
+        border: 1px solid #555;
+        border-radius: 4px;
+        background-color: #333;
+        color: #eee;
+      }
+      button {
+        padding: 8px 15px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1em;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+      #status {
+        margin-top: 10px;
+        color: #aaa;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>hachip WASM Emulator</h1>
+    <canvas id="chip8-canvas"></canvas>
+    <div id="controls">
+      <input type="file" id="rom-input" accept=".ch8">
+      <button id="load-rom-btn">Load ROM</button>
+      <button id="reset-btn">Reset Emulator</button>
+    </div>
+    <div id="status">Ready. Load a CHIP-8 ROM (.ch8)</div>
+
+    <script type="module">
+      import init, { Emulator, init_wasm } from './pkg/hachip_core.js';
+
+      const CANVAS_ID = "chip8-canvas";
+      const PIXEL_WIDTH = 64;
+      const PIXEL_HEIGHT = 32;
+      const SCALING_FACTOR = 10;
+
+      let emulator = null;
+      let animationFrameId = null;
+      let wasm_memory = null;
+
+      const canvas = document.getElementById(CANVAS_ID);
+      const ctx = canvas.getContext('2d');
+      const romInput = document.getElementById('rom-input');
+      const loadRomBtn = document.getElementById('load-rom-btn');
+      const resetBtn = document.getElementById('reset-btn');
+      const statusDiv = document.getElementById('status');
+
+      canvas.width = PIXEL_WIDTH;
+      canvas.height = PIXEL_HEIGHT;
+
+      // Fill with black initially
+      ctx.fillStyle = 'black';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      async function run() {
+        const wasm_exports = await init(); // Capture the exports
+        wasm_memory = wasm_exports.memory; // Store the memory object
+        init_wasm(); // Call our custom WASM initialization
+        statusDiv.textContent = "WASM module loaded. Load a CHIP-8 ROM (.ch8)";
+
+        console.log("JavaScript run() function executed."); // ADD THIS LOG
+
+        emulator = new Emulator();
+      }
+
+      function startEmulatorLoop() {
+        if (animationFrameId) {
+          cancelAnimationFrame(animationFrameId);
+        }
+
+        // Setup imageData once outside the loop
+        const imageData = ctx.createImageData(PIXEL_WIDTH, PIXEL_HEIGHT);
+        const imageDataArray = imageData.data; // This is a Uint8ClampedArray representing RGBA
+
+        const render = () => {
+          // You might run multiple ticks per frame to speed up emulation, e.g.:
+          // for (let i = 0; i < 8; i++) { // Run 8 CPU cycles per display frame
+          //   emulator.tick();
+          // }
+          for (let i = 0; i < 8; i++) { // Run 8 CPU cycles per display frame
+            emulator.tick();
+          }
+
+          if (emulator.display_updated()) {
+            const displayPtr = emulator.get_display_ptr();
+            const displayWidth = emulator.get_display_width();
+            const displayHeight = emulator.get_display_height();
+            const displayMemory = new Uint8Array(wasm_memory.buffer, displayPtr, displayWidth * displayHeight);
+
+            // Directly manipulate imageDataArray based on displayMemory (monochrome 0/1 to RGBA)
+            for (let i = 0; i < displayWidth * displayHeight; i++) {
+              const pixelState = displayMemory[i]; // 0 or 1 from Rust
+              const offset = i * 4; // Each pixel in ImageData is 4 bytes (R, G, B, A)
+
+              if (pixelState === 1) { // If Rust pixel is 'on' (1), make it white
+                imageDataArray[offset + 0] = 255; // R
+                imageDataArray[offset + 1] = 255; // G
+                imageDataArray[offset + 2] = 255; // B
+                imageDataArray[offset + 3] = 255; // A (fully opaque)
+              } else { // If Rust pixel is 'off' (0), make it black
+                imageDataArray[offset + 0] = 0;   // R
+                imageDataArray[offset + 1] = 0;   // G
+                imageDataArray[offset + 2] = 0;   // B
+                imageDataArray[offset + 3] = 255; // A (fully opaque)
+              }
+            }
+
+            // Put the entire ImageData to canvas once
+            ctx.putImageData(imageData, 0, 0);
+
+            // The canvas's CSS 'image-rendering: pixelated' handles the scaling to the final size.
+          }
+          animationFrameId = requestAnimationFrame(render);
+        };
+        animationFrameId = requestAnimationFrame(render);
+      }
+
+      function handleRomLoad(event) {
+        const file = event.target.files[0];
+        if (!file) {
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          const romData = new Uint8Array(e.target.result);
+          if (emulator) {
+            emulator.load_rom(romData);
+            statusDiv.textContent = `ROM "${file.name}" loaded. Running...`;
+            startEmulatorLoop(); // ADDED here
+          } else {
+            statusDiv.textContent = "Emulator not initialized. Please refresh and try again.";
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
+      function handleReset() {
+        if (emulator) {
+          emulator.reset(); // Assuming a reset function is available in Emulator
+          statusDiv.textContent = "Emulator reset. Load a new ROM.";
+        }
+      }
+
+      // Keyboard input handling
+      const keymap = {
+        '1': 0x1, '2': 0x2, '3': 0x3, '4': 0xc,
+        'q': 0x4, 'w': 0x5, 'e': 0x6, 'r': 0xd,
+        'a': 0x7, 's': 0x8, 'd': 0x9, 'f': 0xe,
+        'z': 0xa, 'x': 0x0, 'c': 0xb, 'v': 0xf,
+      };
+
+      document.addEventListener('keydown', (e) => {
+        const chip8Key = keymap[e.key.toLowerCase()];
+        console.log(`JS Keydown: e.key=${e.key}, chip8Key=${chip8Key}`); // ADD THIS LOG
+        if (chip8Key !== undefined && emulator) {
+          emulator.set_key_state(chip8Key, true);
+          e.preventDefault(); // Prevent default browser action
+        }
+      });
+
+      document.addEventListener('keyup', (e) => {
+        const chip8Key = keymap[e.key.toLowerCase()];
+        if (chip8Key !== undefined && emulator) {
+          emulator.set_key_state(chip8Key, false);
+          e.preventDefault(); // Prevent default browser action
+        }
+      });
+
+
+      loadRomBtn.addEventListener('click', () => {
+        romInput.click(); // Trigger file input click
+      });
+
+      romInput.addEventListener('change', handleRomLoad);
+      resetBtn.addEventListener('click', handleReset);
+
+      run();
+    </script>
+  </body>
+</html>
