@@ -3,6 +3,8 @@ name: Build binary
 on:
   push:
     branches: ["master"]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -18,9 +20,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Get short commit SHA
-        id: get_sha
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       - run: rustup update
       - name: Setup VS (Windows)
         uses: microsoft/setup-msbuild@v1.1
@@ -29,10 +28,11 @@ jobs:
         run: cargo build --release --verbose
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          tag_name: v${{ steps.get_sha.outputs.sha_short }}
-          name: Release v${{ steps.get_sha.outputs.sha_short }}
-          draft: true
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: false
           files: |
             target/release/hachip
             target/release/hachip.exe
