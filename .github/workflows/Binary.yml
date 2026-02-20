@@ -34,7 +34,7 @@ jobs:
           name: Release ${{ github.ref_name }}
           draft: false
           files: |
-            target/release/hachip
-            target/release/hachip.exe
+            target/release/hachip_console
+            target/release/hachip_console.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
