@@ -18,9 +18,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Get short commit SHA
+        id: get_sha
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       - run: rustup update
       - name: Setup VS (Windows)
         uses: microsoft/setup-msbuild@v1.1
         if: matrix.os == 'windows-latest'
       - name: Build
         run: cargo build --release --verbose
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.get_sha.outputs.sha_short }}
+          name: Release v${{ steps.get_sha.outputs.sha_short }}
+          draft: true
+          files: |
+            target/release/hachip
+            target/release/hachip.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
