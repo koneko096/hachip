@@ -22,11 +22,6 @@ impl Keypad {
     pub fn set_key(&mut self, index: u8, is_pressed: bool) {
         if (index as usize) < self.keys.len() {
             self.keys[index as usize] = is_pressed;
-            // Add this logging:
-            #[cfg(feature = "wasm_build")]
-            crate::log!("Keypad: Key {:#X} set to {}", index, is_pressed);
-            #[cfg(not(feature = "wasm_build"))]
-            println!("Keypad: Key {:#X} set to {}", index, is_pressed);
         }
     }
 

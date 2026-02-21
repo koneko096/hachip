@@ -48,7 +48,6 @@ impl Cpu {
     pub fn reset(&mut self) {
         self.i = 0;
         self.pc = 0x200;
-        // Removed: self.memory = [0; 4096];
         self.v = [0; 16];
         self.stack = [0; 16];
         self.sp = 0;
@@ -138,12 +137,8 @@ impl Cpu {
                 // 00EE - RET
                 // Return from a subroutine.
                 // The interpreter sets the program counter to the address at the top of the stack, then subtracts 1 from the stack pointer.
-                // println!("sp: {:X}", self.sp); // Removed for cleaner output
-                // println!("val: {:X}", self.stack[self.sp as usize]); // Removed for cleaner output
-
                 self.sp -= 1;
                 self.pc = self.stack[self.sp as usize];
-                // self.stack[self.sp as usize] = 0xBEEF; // Removed - not standard CHIP-8 behavior to clear stack entry
                 self.pc += 2;
             },
             0x2000 ..= 0x2FFF => {
@@ -154,9 +149,6 @@ impl Cpu {
                 self.stack[self.sp as usize] = self.pc;
                 self.pc = opcode & 0x0FFF;
                 self.sp += 1;
-
-                // TODO better error handling if there was a stack overflow?
-                // println!("call subroutine at {:X}", opcode); // Removed for cleaner output
             },
             0x3000 ..= 0x3FFF => {
                 // 3xkk - SE Vx, byte
@@ -331,7 +323,6 @@ impl Cpu {
                 let kk = (opcode & 0x00FF) as u8;
 
                 let mut buf = [0u8; 1];
-                let _ = &mut buf;
                 #[cfg(any(feature = "console_ui", feature = "wasm_build"))]
                 getrandom::getrandom(&mut buf).unwrap();
                 let random = buf[0];

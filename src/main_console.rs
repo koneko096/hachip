@@ -1,43 +1,31 @@
-#[cfg(feature = "console_ui")]
 extern crate env_logger;
-#[cfg(feature = "console_ui")]
 extern crate log;
 
-#[cfg(feature = "console_ui")]
 use sdl2::keyboard::Keycode;
-#[cfg(feature = "console_ui")]
 use sdl2::pixels::Color;
-#[cfg(feature = "console_ui")]
 use sdl2::rect::Rect;
-#[cfg(feature = "console_ui")]
 use sdl2::render::Canvas;
-#[cfg(feature = "console_ui")]
 use sdl2::video::Window;
-#[cfg(feature = "console_ui")]
 use std::collections::HashMap;
-#[cfg(feature = "console_ui")]
 use std::fs::File;
-#[cfg(feature = "console_ui")]
 use std::io::{self, Read};
-#[cfg(feature = "console_ui")]
 use std::{thread, time, env};
 
 use hachip_core::cpu::Cpu;
 use hachip_core::ppu; // Import ppu module
 
 // Re-introduce PixelGrid trait and CanvasWindow struct for SDL2 rendering
-#[cfg(feature = "console_ui")]
 pub trait PixelGrid {
     fn set_draw_color(&mut self, color: Color);
     fn clear(&mut self);
     fn present(&mut self);
     fn fill_rect(&mut self, rect: Rect) -> Result<(), String>;
 }
-#[cfg(feature = "console_ui")]
+
 pub struct CanvasWindow {
     canvas: Canvas<Window>
 }
-#[cfg(feature = "console_ui")]
+
 impl CanvasWindow {
     pub fn new(canvas: Canvas<Window>) -> CanvasWindow {
         CanvasWindow {
@@ -45,7 +33,7 @@ impl CanvasWindow {
         }
     }
 }
-#[cfg(feature = "console_ui")]
+
 impl PixelGrid for CanvasWindow {
     fn set_draw_color(&mut self, color: Color) {
         self.canvas.set_draw_color(color);
@@ -62,11 +50,10 @@ impl PixelGrid for CanvasWindow {
 }
 
 
-#[cfg(feature = "console_ui")]
 fn main() -> io::Result<()> {
     env_logger::init();
 
-    let KEYMAP: HashMap<Keycode, u8> = [
+    let keymap: HashMap<Keycode, u8> = [
         (Keycode::Num1, 0x1), (Keycode::Num2, 0x2), (Keycode::Num3, 0x3), (Keycode::Num4, 0xc),
         (Keycode::Q, 0x4), (Keycode::W, 0x5), (Keycode::E, 0x6), (Keycode::R, 0xd),
         (Keycode::A, 0x7), (Keycode::S, 0x8), (Keycode::D, 0x9), (Keycode::F, 0xe),
@@ -117,7 +104,7 @@ fn main() -> io::Result<()> {
             .keyboard_state()
             .pressed_scancodes()
             .filter_map(Keycode::from_scancode)
-            .filter_map(|x| KEYMAP.get(&x))
+            .filter_map(|x| keymap.get(&x))
             .cloned()
             .collect();
         cpu.keypad.press(keys);
@@ -166,13 +153,10 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "console_ui")]
 fn open_rom(file_name: &str) -> io::Result<Vec<u8>> {
-    #[cfg(feature = "console_ui")] // log::info requires log feature
     log::info!("load_game() {}", file_name);
 
     let file_metadata = std::fs::metadata(file_name)?;
-    #[cfg(feature = "console_ui")] // log::info requires log feature
     log::info!("{} is {} bytes in size", file_name, file_metadata.len());
 
     let mut f = File::open(file_name)?;
@@ -180,11 +164,4 @@ fn open_rom(file_name: &str) -> io::Result<Vec<u8>> {
     f.read_exact(&mut buffer)?;
 
     Ok(buffer)
-}
-
-#[cfg(not(feature = "console_ui"))]
-fn main() {
-    // This main will be compiled if console_ui feature is not enabled.
-    // This is useful for building only the library without a runnable binary.
-    panic!("This is a library-only build. The console UI is not enabled.");
 }

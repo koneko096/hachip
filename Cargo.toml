@@ -30,3 +30,4 @@ crate-type = ["cdylib", "rlib"] # Add cdylib for WASM target
 [[bin]]
 name = "hachip_console"
 path = "src/main_console.rs"
+required-features = ["console_ui"]
