@@ -13,18 +13,31 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: macos-latest
           - os: windows-latest
           - os: ubuntu-latest
+          - os: macos-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - run: rustup update
+      - name: Install SDL2 (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install sdl2 pkg-config
+          export PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:$PKG_CONFIG_PATH"
+          export LIBRARY_PATH="/opt/homebrew/lib:$LIBRARY_PATH"
+      - name: Install SDL2 (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
       - name: Setup VS (Windows)
         uses: microsoft/setup-msbuild@v1.1
         if: matrix.os == 'windows-latest'
-      - name: Build
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        run: cargo build --release --verbose --features console_ui,bundled_sdl
+      - name: Build (Unix)
+        if: matrix.os != 'windows-latest'
         run: cargo build --release --verbose --features console_ui
       - name: Rename binary for release (Linux)
         if: runner.os == 'Linux'

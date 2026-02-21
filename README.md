@@ -5,14 +5,24 @@
 ## Requirements
 - Rust (Stable)
 - SDL2 (for console UI)
+  - macOS: `brew install sdl2`
+  - Linux: `sudo apt install libsdl2-dev`
+  - Windows: SDL2 is bundled or can be installed via vcpkg
 
 ## Building
 
 ### Console UI
-To build the console emulator:
+To build the console emulator with system SDL2:
 ```shell
 cargo build --release --features console_ui
 ```
+
+If you don't have SDL2 installed, you can use the bundled version (requires CMake):
+```shell
+cargo build --release --features console_ui,bundled_sdl
+```
+
+> **Note for Windows**: It is recommended to use the `bundled_sdl` feature.
 
 ### WASM
 To build for Web/WASM:
