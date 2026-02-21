@@ -1,6 +1,5 @@
 use wasm_bindgen::prelude::*;
 use crate::cpu::Cpu;
-use crate::ppu::{WIDTH, HEIGHT};
 
 #[wasm_bindgen]
 pub struct Emulator {
@@ -25,6 +24,10 @@ impl Emulator {
         self.cpu.execute_cycle();
     }
 
+    pub fn tick_timers(&mut self) {
+        self.cpu.tick_timers();
+    }
+
     pub fn reset(&mut self) { // Added reset method
         self.cpu.reset();
     }
@@ -34,11 +37,11 @@ impl Emulator {
     }
 
     pub fn get_display_width(&self) -> u32 {
-        WIDTH as u32
+        self.cpu.ppu.get_width() as u32
     }
 
     pub fn get_display_height(&self) -> u32 {
-        HEIGHT as u32
+        self.cpu.ppu.get_height() as u32
     }
 
     pub fn set_key_state(&mut self, key_index: u8, is_pressed: bool) {

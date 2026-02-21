@@ -1,79 +1,106 @@
 // No sdl2 imports here anymore
 
-pub const WIDTH: usize = 64;
-pub const HEIGHT: usize = 32;
-
-pub const FRAME_WIDTH: u32 = 640;
-pub const FRAME_HEIGHT: u32 = 320;
-
-pub const FACTOR: usize = 10; // FACTOR needs to be public for console_ui
-
-// Removed PixelGrid trait and CanvasWindow struct from here
+pub const LOW_RES_WIDTH: usize = 64;
+pub const LOW_RES_HEIGHT: usize = 32;
+pub const HIGH_RES_WIDTH: usize = 128;
+pub const HIGH_RES_HEIGHT: usize = 64;
 
 pub trait Display {
     fn cls(&mut self);
     fn draw(&mut self, x: usize, y: usize, sprite: &[u8]) -> bool;
     fn set_pixel(&mut self, x: usize, y: usize, val: u8);
-    fn get_pixel(&self, x: usize, y: usize) -> bool; // get_pixel can be immutable
+    fn get_pixel(&self, x: usize, y: usize) -> bool;
 }
 
 pub struct Ppu {
-    memory: [u8; WIDTH * HEIGHT], // Use WIDTH * HEIGHT for clarity
-    display_updated: bool, // New flag to signal updates
+    memory: [u8; HIGH_RES_WIDTH * HIGH_RES_HEIGHT],
+    display_updated: bool,
+    width: usize,
+    height: usize,
 }
 
 impl Ppu {
-    pub fn new() -> Ppu { // No longer takes PixelGrid
+    pub fn new() -> Ppu {
         Ppu {
-            memory: [0; WIDTH * HEIGHT],
+            memory: [0; HIGH_RES_WIDTH * HIGH_RES_HEIGHT],
             display_updated: false,
+            width: LOW_RES_WIDTH,
+            height: LOW_RES_HEIGHT,
         }
     }
 
+    pub fn set_resolution(&mut self, high_res: bool) {
+        if high_res {
+            self.width = HIGH_RES_WIDTH;
+            self.height = HIGH_RES_HEIGHT;
+        } else {
+            self.width = LOW_RES_WIDTH;
+            self.height = LOW_RES_HEIGHT;
+        }
+        self.cls(); // Resolution change usually implies clearing the screen
+    }
+
+    pub fn get_width(&self) -> usize {
+        self.width
+    }
+
+    pub fn get_height(&self) -> usize {
+        self.height
+    }
+
     pub fn get_display_memory(&self) -> &[u8] {
-        &self.memory
+        &self.memory[0..self.width * self.height]
     }
 
     pub fn take_display_update_flag(&mut self) -> bool {
         let updated = self.display_updated;
-        self.display_updated = false; // Reset the flag after being read
+        self.display_updated = false;
         updated
     }
 }
 
 impl Display for Ppu {
     fn cls(&mut self) {
-        self.memory.iter_mut().for_each(|x| *x = 0); // Clear memory efficiently
+        self.memory[0..self.width * self.height].iter_mut().for_each(|x| *x = 0);
         self.display_updated = true;
     }
 
     fn draw(&mut self, x: usize, y: usize, sprite: &[u8]) -> bool {
         let rows = sprite.len();
         let mut collision = false;
-        for (j, _) in sprite.iter().enumerate().take(rows) {
-            let row = &sprite[j];
+        
+        // Use coordinates directly for strict clipping behavior
+        let start_x = x;
+        let start_y = y;
+
+        for j in 0..rows {
+            let row = sprite[j];
             for i in 0..8 {
-                let new_value = row >> (7 - i) & 0x01;
+                let new_value = (row >> (7 - i)) & 0x01;
                 if new_value == 1 {
-                    let xi = (x + i) % WIDTH;
-                    let yj = (y + j) % HEIGHT;
-                    let old_value = self.get_pixel(xi, yj); // Use immutable get_pixel
-                    if old_value {
-                        collision = true;
+                    let xi = start_x + i;
+                    let yj = start_y + j;
+                    
+                    // Clip pixels that fall off the edge (Standard Octo/SCHIP clipping quirk)
+                    if xi < self.width && yj < self.height {
+                        let old_value = self.get_pixel(xi, yj);
+                        if old_value {
+                            collision = true;
+                        }
+                        // XOR logic
+                        let display_value = if old_value { 0 } else { 1 };
+                        self.set_pixel(xi, yj, display_value);
                     }
-                    let display_value = ((new_value == 1) ^ old_value) as u8;
-                    self.set_pixel(xi, yj, display_value); // set_pixel will mark display_updated
                 }
             }
         }
-        // display_updated is already set by set_pixel if any pixel changed
         return collision;
     }
 
     fn set_pixel(&mut self, x: usize, y: usize, val: u8) {
-        let index = x + y * WIDTH;
-        if index < self.memory.len() { // Boundary check
-            if self.memory[index] != val { // Only mark as updated if value actually changes
+        let index = x + y * self.width;
+        if index < self.width * self.height {
+            if self.memory[index] != val {
                 self.memory[index] = val;
                 self.display_updated = true;
             }
@@ -81,11 +108,11 @@ impl Display for Ppu {
     }
 
     fn get_pixel(&self, x: usize, y: usize) -> bool {
-        let index = x + y * WIDTH;
-        if index < self.memory.len() { // Boundary check
+        let index = x + y * self.width;
+        if index < self.width * self.height {
             self.memory[index] == 1
         } else {
-            false // Or handle error
+            false
         }
     }
 }

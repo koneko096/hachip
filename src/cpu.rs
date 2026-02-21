@@ -3,8 +3,8 @@ use crate::keypad::Keypad;
 use crate::ppu::{Ppu, Display, FONT_SET}; // Import Ppu struct directly
 #[cfg(feature = "console_ui")]
 use log;
-#[cfg(feature = "console_ui")]
-use getrandom; // Import getrandom for console_ui feature
+#[cfg(any(feature = "console_ui", feature = "wasm_build"))]
+use getrandom;
 
 pub struct Cpu {
     // index register
@@ -73,7 +73,22 @@ impl Cpu {
 
     pub fn execute_cycle(&mut self) {
         let opcode: u16 = self.read_word();
-        self.process_opcode(opcode).unwrap();
+        if let Err(e) = self.process_opcode(opcode) {
+            #[cfg(feature = "wasm_build")]
+            crate::log!("CPU Error: {}", e.message);
+            #[cfg(feature = "console_ui")]
+            log::error!("CPU Error: {}", e.message);
+            self.pc += 2;
+        }
+    }
+
+    pub fn tick_timers(&mut self) {
+        if self.dt > 0 {
+            self.dt -= 1;
+        }
+        if self.st > 0 {
+            self.st -= 1;
+        }
     }
 
     fn read_word(&self) -> u16 {
@@ -93,11 +108,31 @@ impl Cpu {
                 self.ppu.cls(); // Changed from self.display.cls()
                 self.pc += 2;
             }
+            0x00FB => { // SCHIP Scroll Right
+                self.pc += 2;
+            }
+            0x00FC => { // SCHIP Scroll Left
+                self.pc += 2;
+            }
+            0x00FD => { // SCHIP Exit
+                self.pc += 2; 
+            }
+            0x00FE => { // SCHIP Low-res (64x32)
+                self.ppu.set_resolution(false);
+                self.pc += 2;
+            }
+            0x00FF => { // SCHIP High-res (128x64)
+                self.ppu.set_resolution(true);
+                self.pc += 2;
+            }
             0x1000 ..= 0x1FFF => {
                 // 1nnn - JP addr
                 // Jump to location nnn.
                 self.pc = opcode & 0x0FFF;
             },
+            0x00C0..=0x00CF => { // SCHIP Scroll Down
+                self.pc += 2;
+            }
             0x00EE => {
                 // 00EE - RET
                 // Return from a subroutine.
@@ -188,21 +223,16 @@ impl Cpu {
                     }
                     1 => {
                         // 8xy1 - OR Vx, Vy
-                        // Performs a bitwise OR on the values of Vx and Vy, then stores the result in Vx.
                         self.v[x] |= self.v[y];
                         self.pc += 2;
                     }
                     2 => {
                         // 8xy2 - AND Vx, Vy
-                        // Set Vx = Vx AND Vy.
-                        // Performs a bitwise AND on the values of Vx and Vy, then stores the result in Vx.
                         self.v[x] &= self.v[y];
                         self.pc += 2;
                     }
                     3 => {
                         // 8xy3 - XOR Vx, Vy
-                        // Set Vx = Vx XOR Vy.
-                        // Performs a bitwise exclusive OR on the values of Vx and Vy, then stores the result in Vx.
                         self.v[x] ^= self.v[y];
                         self.pc += 2;
                     }
@@ -234,10 +264,9 @@ impl Cpu {
                     }
                     6 => {
                         // 8xy6 - SHR Vx {, Vy}
-                        // Set Vx = Vx SHR 1.
-                        // If the least-significant bit of Vx is 1, then VF is set to 1, otherwise 0. Then Vx is divided by 2.
-                        self.v[0xF] = self.v[x] & 0x1;
-                        self.v[x] >>= 1;
+                        // Original behavior: Vx = Vy >> 1. VF = bit shifted out.
+                        self.v[0xF] = self.v[y] & 0x1;
+                        self.v[x] = self.v[y] >> 1;
                         self.pc += 2;
                     }
                     7 => {
@@ -255,15 +284,14 @@ impl Cpu {
                     }
                     0xE => {
                         // 8xyE - SHL Vx {, Vy}
-                        // Set Vx = Vx SHL 1.
-                        // If the most-significant bit of Vx is 1, then VF is set to 1, otherwise to 0. Then Vx is multiplied by 2.
-                        self.v[0xF] = (self.v[x] & 0x80) >> 7; // Get the MSB
-                        self.v[x] <<= 1;
+                        // Original behavior: Vx = Vy << 1. VF = bit shifted out.
+                        self.v[0xF] = (self.v[y] & 0x80) >> 7;
+                        self.v[x] = self.v[y] << 1;
                         self.pc += 2;
                     }
                     _ => {
                         self.pc += 2;
-                        let error = EmulateCycleError { message: format!("{:X} opcode not handled a", opcode) };
+                        let error = EmulateCycleError { message: format!("{:04X} opcode not handled", opcode) };
                         return Err(error);
                     }
                 }
@@ -302,11 +330,8 @@ impl Cpu {
                 let kk = (opcode & 0x00FF) as u8;
 
                 let mut buf = [0u8; 1];
-                #[cfg(feature = "console_ui")] // Conditional compilation for getrandom
+                #[cfg(any(feature = "console_ui", feature = "wasm_build"))]
                 getrandom::getrandom(&mut buf).unwrap();
-                if !cfg!(feature = "console_ui") { // Use if cfg! for stable conditional expression
-                    buf[0] = 0; // Placeholder for non-console_ui (e.g., WASM)
-                }
                 let random = buf[0];
 
                 self.v[x as usize] = random & kk;
@@ -314,14 +339,26 @@ impl Cpu {
             }
             0xD000 ..= 0xDFFF => {
                 // Dxyn - DRW Vx, Vy, nibble
-                // Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision.
                 let x: usize = self.v[((opcode & 0x0F00) >> 8) as usize] as usize;
                 let y: usize = self.v[((opcode & 0x00F0) >> 4) as usize] as usize;
                 let height: usize = (opcode & 0x000F) as usize;
-                let sprite: &[u8] = &self.memory[self.i as usize .. (self.i + height as u16) as usize];
 
-                let collision = self.ppu.draw(x, y, sprite); // Changed from self.display.draw()
-                self.v[0xF] = collision as u8; // Cast bool to u8
+                let collision = if height == 0 {
+                    // SCHIP 16x16 sprite
+                    let mut schip_collision = false;
+                    for j in 0..16 {
+                        let row_ptr = self.i as usize + (j * 2);
+                        let row_data = &self.memory[row_ptr..row_ptr + 2];
+                        if self.ppu.draw(x, y + j, &row_data[0..1]) { schip_collision = true; }
+                        if self.ppu.draw(x + 8, y + j, &row_data[1..2]) { schip_collision = true; }
+                    }
+                    schip_collision
+                } else {
+                    let sprite: &[u8] = &self.memory[self.i as usize .. (self.i + height as u16) as usize];
+                    self.ppu.draw(x, y, sprite)
+                };
+
+                self.v[0xF] = collision as u8;
                 self.pc += 2;
             }
             0xE000 ..= 0xEFFF => {
@@ -349,7 +386,7 @@ impl Cpu {
                     }
                     _ => {
                         self.pc += 2;
-                        let error = EmulateCycleError { message: format!("{:X} opcode not handled b", opcode) };
+                        let error = EmulateCycleError { message: format!("{:04X} opcode not handled", opcode) };
                         return Err(error);
                     }
                 }
@@ -405,39 +442,30 @@ impl Cpu {
                     }
                     0x55 => {
                         // Fx55 - LD [I], Vx
-                        // Store registers V0 through Vx in memory starting at location I.
-                        // The interpreter copies the values of registers V0 through Vx into memory, starting at the address in I.
                         for offset in 0..=x {
-                            self.memory[(self.i + offset as u16) as usize] = self.v[offset];
+                            self.memory[self.i as usize] = self.v[offset];
+                            self.i += 1;
                         }
                     }
                     0x65 => {
                         // Fx65 - LD Vx, [I]
-                        // The interpreter reads values from memory starting at location I into registers V0 through Vx.
                         for offset in 0..=x {
-                            self.v[offset] = self.memory[(self.i + offset as u16) as usize];
+                            self.v[offset] = self.memory[self.i as usize];
+                            self.i += 1;
                         }
                     }
                     _ => {
                         self.pc += 2;
-                        let error = EmulateCycleError { message: format!("{:X} F opcode not handled", opcode) };
+                        let error = EmulateCycleError { message: format!("{:04X} F opcode not handled", opcode) };
                         return Err(error);
                     }
                 }
                 self.pc += 2;
             }
             _ => {
-                let error = EmulateCycleError { message: format!("{:X} opcode not handled d", opcode) };
+                let error = EmulateCycleError { message: format!("{:04X} opcode not handled", opcode) };
                 return Err(error);
             }
-        }
-
-        // Decrease timers
-        if self.dt > 0 {
-            self.dt -= 1;
-        }
-        if self.st > 0 {
-            self.st -= 1;
         }
 
         Ok(())
