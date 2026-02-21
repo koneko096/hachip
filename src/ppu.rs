@@ -5,6 +5,9 @@ pub const LOW_RES_HEIGHT: usize = 32;
 pub const HIGH_RES_WIDTH: usize = 128;
 pub const HIGH_RES_HEIGHT: usize = 64;
 
+pub const FRAME_WIDTH: u32 = 640;
+pub const FRAME_HEIGHT: u32 = 320;
+
 pub trait Display {
     fn cls(&mut self);
     fn draw(&mut self, x: usize, y: usize, sprite: &[u8]) -> bool;
@@ -138,7 +141,7 @@ pub static FONT_SET: [u8; 80] = [
 
 #[cfg(test)]
 mod tests {
-    use super::{Ppu, Display, WIDTH, HEIGHT};
+    use super::{Ppu, Display};
 
     // No more PixelGridMock needed in ppu.rs tests
 

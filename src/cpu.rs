@@ -74,6 +74,7 @@ impl Cpu {
     pub fn execute_cycle(&mut self) {
         let opcode: u16 = self.read_word();
         if let Err(e) = self.process_opcode(opcode) {
+            let _ = &e;
             #[cfg(feature = "wasm_build")]
             crate::log!("CPU Error: {}", e.message);
             #[cfg(feature = "console_ui")]
@@ -330,6 +331,7 @@ impl Cpu {
                 let kk = (opcode & 0x00FF) as u8;
 
                 let mut buf = [0u8; 1];
+                let _ = &mut buf;
                 #[cfg(any(feature = "console_ui", feature = "wasm_build"))]
                 getrandom::getrandom(&mut buf).unwrap();
                 let random = buf[0];

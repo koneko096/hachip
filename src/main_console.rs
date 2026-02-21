@@ -18,15 +18,12 @@ use std::collections::HashMap;
 #[cfg(feature = "console_ui")]
 use std::fs::File;
 #[cfg(feature = "console_ui")]
-use std::io::{Read, Result};
-#[cfg(feature = "console_ui")]
-use sdl2::Sdl;
+use std::io::{self, Read};
 #[cfg(feature = "console_ui")]
 use std::{thread, time, env};
 
 use hachip_core::cpu::Cpu;
 use hachip_core::ppu; // Import ppu module
-use hachip_core::ppu::Display as CoreDisplayTrait; // Alias to avoid name collision with local Display trait
 
 // Re-introduce PixelGrid trait and CanvasWindow struct for SDL2 rendering
 #[cfg(feature = "console_ui")]
@@ -66,7 +63,7 @@ impl PixelGrid for CanvasWindow {
 
 
 #[cfg(feature = "console_ui")]
-fn main() -> Result<()> {
+fn main() -> io::Result<()> {
     env_logger::init();
 
     let KEYMAP: HashMap<Keycode, u8> = [
@@ -125,34 +122,44 @@ fn main() -> Result<()> {
             .collect();
         cpu.keypad.press(keys);
 
-        // Execute CPU cycle
-        cpu.execute_cycle();
+        // Execute CPU cycles (roughly 600 instructions per second at 60Hz)
+        for _ in 0..10 {
+            cpu.execute_cycle();
+        }
+
+        // Tick Delay and Sound timers at 60Hz
+        cpu.tick_timers();
 
         // Render if display updated
         if cpu.ppu.take_display_update_flag() {
+            canvas_window.set_draw_color(clear_color);
             canvas_window.clear(); // Clear the entire canvas
             let display_memory = cpu.ppu.get_display_memory();
 
             canvas_window.set_draw_color(draw_color); // Set color for drawing active pixels
-            for y in 0..ppu::HEIGHT {
-                for x in 0..ppu::WIDTH {
-                    let index = x + y * ppu::WIDTH;
+            let width = cpu.ppu.get_width();
+            let height = cpu.ppu.get_height();
+            let factor = if width == ppu::HIGH_RES_WIDTH { 5 } else { 10 };
+
+            for y in 0..height {
+                for x in 0..width {
+                    let index = x + y * width;
                     if display_memory[index] == 1 {
                         // Draw pixel if it's "on"
                         canvas_window.fill_rect(Rect::new(
-                            (x * ppu::FACTOR) as i32,
-                            (y * ppu::FACTOR) as i32,
-                            ppu::FACTOR as u32,
-                            ppu::FACTOR as u32,
-                        ))?;
+                            (x * factor) as i32,
+                            (y * factor) as i32,
+                            factor as u32,
+                            factor as u32,
+                        )).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
                     }
                 }
             }
             canvas_window.present(); // Present the rendered frame
         }
 
-        // Sync display at roughly 60Hz (8ms per frame)
-        let display_sync = time::Duration::from_millis(8);
+        // Sync display at 60Hz (roughly 16.6ms per frame)
+        let display_sync = time::Duration::from_millis(16);
         thread::sleep(display_sync);
     }
 
@@ -160,7 +167,7 @@ fn main() -> Result<()> {
 }
 
 #[cfg(feature = "console_ui")]
-fn open_rom(file_name: &str) -> Result<Vec<u8>> {
+fn open_rom(file_name: &str) -> io::Result<Vec<u8>> {
     #[cfg(feature = "console_ui")] // log::info requires log feature
     log::info!("load_game() {}", file_name);
 
