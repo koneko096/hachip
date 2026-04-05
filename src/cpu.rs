@@ -75,9 +75,9 @@ impl Cpu {
         if let Err(e) = self.process_opcode(opcode) {
             let _ = &e;
             #[cfg(feature = "wasm_build")]
-            crate::log!("CPU Error: {}", e.message);
+            crate::log!("CPU Error: {} (pc={:04X} opcode={:04X})", e.message, self.pc, opcode);
             #[cfg(feature = "console_ui")]
-            log::error!("CPU Error: {}", e.message);
+            log::error!("CPU Error: {} (pc={:04X} opcode={:04X})", e.message, self.pc, opcode);
             self.pc += 2;
         }
     }
@@ -97,6 +97,27 @@ impl Cpu {
         code1 << 8 | code2
     }
 
+    fn log_missing_opcode(&self, opcode: u16, context: &str) {
+        #[cfg(feature = "wasm_build")]
+        crate::log!("Missing opcode {}: {:04X}", context, opcode);
+        #[cfg(feature = "console_ui")]
+        log::warn!("Missing opcode {}: {:04X}", context, opcode);
+    }
+
+    fn log_stack_error(&self, message: &str) {
+        #[cfg(feature = "wasm_build")]
+        crate::log!("CPU stack error: {}", message);
+        #[cfg(feature = "console_ui")]
+        log::error!("CPU stack error: {}", message);
+    }
+
+    fn log_opcode_note(&self, message: &str) {
+        #[cfg(feature = "wasm_build")]
+        crate::log!("CPU note: {}", message);
+        #[cfg(feature = "console_ui")]
+        log::warn!("CPU note: {}", message);
+    }
+
     fn process_opcode(&mut self, opcode: u16) -> Result<(), EmulateCycleError> {
         match opcode {
             0x0000 => { // Added: NOP for 0x0000
@@ -109,13 +130,15 @@ impl Cpu {
                 self.pc += 2;
             }
             0x00FB => { // SCHIP Scroll Right
+                self.ppu.scroll_right(4);
                 self.pc += 2;
             }
             0x00FC => { // SCHIP Scroll Left
+                self.ppu.scroll_left(4);
                 self.pc += 2;
             }
             0x00FD => { // SCHIP Exit
-                self.pc += 2; 
+                self.pc += 2;
             }
             0x00FE => { // SCHIP Low-res (64x32)
                 self.ppu.set_resolution(false);
@@ -125,27 +148,45 @@ impl Cpu {
                 self.ppu.set_resolution(true);
                 self.pc += 2;
             }
-            0x1000 ..= 0x1FFF => {
-                // 1nnn - JP addr
-                // Jump to location nnn.
-                self.pc = opcode & 0x0FFF;
-            },
             0x00C0..=0x00CF => { // SCHIP Scroll Down
+                let rows = (opcode & 0x000F) as usize;
+                self.ppu.scroll_down(rows);
                 self.pc += 2;
             }
             0x00EE => {
                 // 00EE - RET
                 // Return from a subroutine.
                 // The interpreter sets the program counter to the address at the top of the stack, then subtracts 1 from the stack pointer.
+                if self.sp == 0 {
+                    let message = "stack underflow on RET";
+                    self.log_stack_error(message);
+                    return Err(EmulateCycleError { message: message.to_string() });
+                }
                 self.sp -= 1;
                 self.pc = self.stack[self.sp as usize];
                 self.pc += 2;
+            },
+            0x0001..=0x0FFF => {
+                // 0nnn - SYS addr (not used by modern interpreters)
+                self.log_missing_opcode(opcode, "0nnn");
+                let error = EmulateCycleError { message: format!("{:04X} 0nnn opcode not handled", opcode) };
+                return Err(error);
+            }
+            0x1000 ..= 0x1FFF => {
+                // 1nnn - JP addr
+                // Jump to location nnn.
+                self.pc = opcode & 0x0FFF;
             },
             0x2000 ..= 0x2FFF => {
                 // 2nnn - CALL addr
                 // Call subroutine at nnn.
                 // Increment the stack pointer, put the current program counter on the top of the stack,
                 // then the program counter is then set to nnn.
+                if self.sp as usize >= self.stack.len() {
+                    let message = "stack overflow on CALL";
+                    self.log_stack_error(message);
+                    return Err(EmulateCycleError { message: message.to_string() });
+                }
                 self.stack[self.sp as usize] = self.pc;
                 self.pc = opcode & 0x0FFF;
                 self.sp += 1;
@@ -177,6 +218,12 @@ impl Cpu {
             0x5000..=0x5FFF => {
                 // 5xy0 - SE Vx, Vy
                 // Skip next instruction if Vx = Vy.
+                if (opcode & 0x000F) != 0 {
+                    self.pc += 2;
+                    self.log_missing_opcode(opcode, "5xy?");
+                    let error = EmulateCycleError { message: format!("{:04X} 5xy? opcode not handled", opcode) };
+                    return Err(error);
+                }
                 let x = (opcode & 0x0F00) >> 8;
                 let y = (opcode & 0x00F0) >> 4;
                 if self.v[x as usize] == self.v[y as usize] {
@@ -284,7 +331,8 @@ impl Cpu {
                     }
                     _ => {
                         self.pc += 2;
-                        let error = EmulateCycleError { message: format!("{:04X} opcode not handled", opcode) };
+                        self.log_missing_opcode(opcode, "8xy?");
+                        let error = EmulateCycleError { message: format!("{:04X} 8xy? opcode not handled", opcode) };
                         return Err(error);
                     }
                 }
@@ -292,6 +340,12 @@ impl Cpu {
             0x9000..=0x9FFF => {
                 // 9xy0 - SNE Vx, Vy
                 // Skip next instruction if Vx != Vy.
+                if (opcode & 0x000F) != 0 {
+                    self.pc += 2;
+                    self.log_missing_opcode(opcode, "9xy?");
+                    let error = EmulateCycleError { message: format!("{:04X} 9xy? opcode not handled", opcode) };
+                    return Err(error);
+                }
                 let x = ((opcode & 0x0F00) >> 8) as usize;
                 let y = ((opcode & 0x00F0) >> 4) as usize;
                 if self.v[x] != self.v[y] {
@@ -379,7 +433,8 @@ impl Cpu {
                     }
                     _ => {
                         self.pc += 2;
-                        let error = EmulateCycleError { message: format!("{:04X} opcode not handled", opcode) };
+                        self.log_missing_opcode(opcode, "Ex??");
+                        let error = EmulateCycleError { message: format!("{:04X} Ex?? opcode not handled", opcode) };
                         return Err(error);
                     }
                 }
@@ -426,6 +481,12 @@ impl Cpu {
                         // Set I = location of sprite for digit Vx.
                         self.i = self.v[x] as u16 * 5;
                     }
+                    0x30 => {
+                        // Fx30 - LD HF, Vx (SCHIP 8x10 font)
+                        // Fallback to standard 4x5 font until SCHIP font set is added.
+                        self.log_opcode_note("Fx30 fallback: using standard font set");
+                        self.i = self.v[x] as u16 * 5;
+                    }
                     0x33 => {
                         // Fx33 - LD B, Vx
                         // Store BCD representation of Vx in memory locations I, I+1, and I+2.
@@ -449,13 +510,15 @@ impl Cpu {
                     }
                     _ => {
                         self.pc += 2;
-                        let error = EmulateCycleError { message: format!("{:04X} F opcode not handled", opcode) };
+                        self.log_missing_opcode(opcode, "Fx??");
+                        let error = EmulateCycleError { message: format!("{:04X} Fx?? opcode not handled", opcode) };
                         return Err(error);
                     }
                 }
                 self.pc += 2;
             }
             _ => {
+                self.log_missing_opcode(opcode, "unmatched");
                 let error = EmulateCycleError { message: format!("{:04X} opcode not handled", opcode) };
                 return Err(error);
             }

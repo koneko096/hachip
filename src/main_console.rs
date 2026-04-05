@@ -1,12 +1,12 @@
 extern crate env_logger;
 extern crate log;
 
-use sdl2::keyboard::Keycode;
+use sdl2::keyboard::{Keycode, Scancode};
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::Canvas;
 use sdl2::video::Window;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, Read};
 use std::{thread, time, env};
@@ -59,6 +59,11 @@ fn main() -> io::Result<()> {
         (Keycode::A, 0x7), (Keycode::S, 0x8), (Keycode::D, 0x9), (Keycode::F, 0xe),
         (Keycode::Z, 0xa), (Keycode::X, 0x0), (Keycode::C, 0xb), (Keycode::V, 0xf),
     ].iter().cloned().collect();
+    let scancode_map: Vec<(Scancode, u8)> = keymap
+        .iter()
+        .filter_map(|(keycode, chip_key)| Scancode::from_keycode(*keycode).map(|sc| (sc, *chip_key)))
+        .collect();
+    let mut pressed_keys: HashSet<u8> = HashSet::new();
 
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -95,18 +100,22 @@ fn main() -> io::Result<()> {
         for event in event_pump.poll_iter() {
             match event {
                 sdl2::event::Event::Quit { .. } => break 'main_loop,
+                sdl2::event::Event::KeyDown { keycode: Some(code), repeat: false, .. } => {
+                    if let Some(chip_key) = keymap.get(&code) {
+                        pressed_keys.insert(*chip_key);
+                    }
+                }
+                sdl2::event::Event::KeyUp { keycode: Some(code), .. } => {
+                    if let Some(chip_key) = keymap.get(&code) {
+                        pressed_keys.remove(chip_key);
+                    }
+                }
                 _ => {}
             }
         }
 
         // Keypad input
-        let keys: Vec<u8> = event_pump
-            .keyboard_state()
-            .pressed_scancodes()
-            .filter_map(Keycode::from_scancode)
-            .filter_map(|x| keymap.get(&x))
-            .cloned()
-            .collect();
+        let keys: Vec<u8> = pressed_keys.iter().cloned().collect();
         cpu.keypad.press(keys);
 
         // Execute CPU cycles (roughly 600 instructions per second at 60Hz)

@@ -60,6 +60,71 @@ impl Ppu {
         self.display_updated = false;
         updated
     }
+
+    pub fn scroll_down(&mut self, rows: usize) {
+        if rows == 0 || rows >= self.height {
+            if rows != 0 {
+                self.cls();
+            }
+            return;
+        }
+        let size = self.width * self.height;
+        let mut next = vec![0u8; size];
+        for y in 0..self.height {
+            let src_y = y.checked_sub(rows);
+            if let Some(sy) = src_y {
+                let dst_row = y * self.width;
+                let src_row = sy * self.width;
+                next[dst_row..dst_row + self.width]
+                    .copy_from_slice(&self.memory[src_row..src_row + self.width]);
+            }
+        }
+        self.memory[0..size].copy_from_slice(&next);
+        self.display_updated = true;
+    }
+
+    pub fn scroll_right(&mut self, pixels: usize) {
+        if pixels == 0 || pixels >= self.width {
+            if pixels != 0 {
+                self.cls();
+            }
+            return;
+        }
+        let size = self.width * self.height;
+        let mut next = vec![0u8; size];
+        for y in 0..self.height {
+            let row = y * self.width;
+            for x in 0..self.width {
+                if x >= pixels {
+                    next[row + x] = self.memory[row + x - pixels];
+                }
+            }
+        }
+        self.memory[0..size].copy_from_slice(&next);
+        self.display_updated = true;
+    }
+
+    pub fn scroll_left(&mut self, pixels: usize) {
+        if pixels == 0 || pixels >= self.width {
+            if pixels != 0 {
+                self.cls();
+            }
+            return;
+        }
+        let size = self.width * self.height;
+        let mut next = vec![0u8; size];
+        for y in 0..self.height {
+            let row = y * self.width;
+            for x in 0..self.width {
+                let src_x = x + pixels;
+                if src_x < self.width {
+                    next[row + x] = self.memory[row + src_x];
+                }
+            }
+        }
+        self.memory[0..size].copy_from_slice(&next);
+        self.display_updated = true;
+    }
 }
 
 impl Display for Ppu {
@@ -72,28 +137,25 @@ impl Display for Ppu {
         let rows = sprite.len();
         let mut collision = false;
         
-        // Use coordinates directly for strict clipping behavior
-        let start_x = x;
-        let start_y = y;
+        // CHIP-8 classic behavior: wrap sprites around screen edges
+        let start_x = x % self.width;
+        let start_y = y % self.height;
 
         for j in 0..rows {
             let row = sprite[j];
             for i in 0..8 {
                 let new_value = (row >> (7 - i)) & 0x01;
                 if new_value == 1 {
-                    let xi = start_x + i;
-                    let yj = start_y + j;
-                    
-                    // Clip pixels that fall off the edge (Standard Octo/SCHIP clipping quirk)
-                    if xi < self.width && yj < self.height {
-                        let old_value = self.get_pixel(xi, yj);
-                        if old_value {
-                            collision = true;
-                        }
-                        // XOR logic
-                        let display_value = if old_value { 0 } else { 1 };
-                        self.set_pixel(xi, yj, display_value);
+                    let xi = (start_x + i) % self.width;
+                    let yj = (start_y + j) % self.height;
+
+                    let old_value = self.get_pixel(xi, yj);
+                    if old_value {
+                        collision = true;
                     }
+                    // XOR logic
+                    let display_value = if old_value { 0 } else { 1 };
+                    self.set_pixel(xi, yj, display_value);
                 }
             }
         }

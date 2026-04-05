@@ -2,7 +2,6 @@ name: Build binary
 
 on:
   push:
-    branches: ["master"]
     tags:
       - 'v*'
   workflow_dispatch:
@@ -20,6 +19,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - uses: moonrepo/setup-rust@v1
       - run: rustup update
       - name: Install SDL2 (macOS)
         if: matrix.os == 'macos-latest'

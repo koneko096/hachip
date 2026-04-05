@@ -1,264 +1,322 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
+    <head>
+        <meta charset="utf-8" />
+        <title>hachip - CHIP-8 Emulator</title>
+        <style>
+            :root {
+                --bg-color: #0f172a;
+                --card-bg: #1e293b;
+                --accent-color: #38bdf8;
+                --text-primary: #f8fafc;
+                --text-secondary: #94a3b8;
+                --success-color: #10b981;
+            }
 
-<head>
-  <meta charset="utf-8">
-  <title>hachip - CHIP-8 Emulator</title>
-  <style>
-    :root {
-      --bg-color: #0f172a;
-      --card-bg: #1e293b;
-      --accent-color: #38bdf8;
-      --text-primary: #f8fafc;
-      --text-secondary: #94a3b8;
-      --success-color: #10b981;
-    }
+            body {
+                font-family:
+                    "Inter",
+                    -apple-system,
+                    BlinkMacSystemFont,
+                    "Segoe UI",
+                    Roboto,
+                    Helvetica,
+                    Arial,
+                    sans-serif;
+                background-color: var(--bg-color);
+                color: var(--text-primary);
+                margin: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                min-height: 100vh;
+                padding: 2rem;
+            }
 
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: var(--bg-color);
-      color: var(--text-primary);
-      margin: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
-      padding: 2rem;
-    }
+            h1 {
+                font-weight: 800;
+                font-size: 2.5rem;
+                margin-bottom: 0.5rem;
+                background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+                background-clip: text;
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+            }
 
-    h1 {
-      font-weight: 800;
-      font-size: 2.5rem;
-      margin-bottom: 0.5rem;
-      background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
-      background-clip: text;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
+            .subtitle {
+                color: var(--text-secondary);
+                margin-bottom: 2rem;
+            }
 
-    .subtitle {
-      color: var(--text-secondary);
-      margin-bottom: 2rem;
-    }
+            #emulator-container {
+                position: relative;
+                background: var(--card-bg);
+                padding: 1rem;
+                border-radius: 1rem;
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+            }
 
-    #emulator-container {
-      position: relative;
-      background: var(--card-bg);
-      padding: 1rem;
-      border-radius: 1rem;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
+            canvas {
+                background: #000;
+                border-radius: 0.5rem;
+                image-rendering: pixelated;
+                width: 640px;
+                height: 320px;
+                display: block;
+            }
 
-    canvas {
-      background: #000;
-      border-radius: 0.5rem;
-      image-rendering: pixelated;
-      width: 640px;
-      height: 320px;
-      display: block;
-    }
+            #controls {
+                margin-top: 1.5rem;
+                display: flex;
+                gap: 1rem;
+                align-items: center;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
 
-    #controls {
-      margin-top: 1.5rem;
-      display: flex;
-      gap: 1rem;
-      align-items: center;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
+            .btn {
+                padding: 0.6rem 1.2rem;
+                border-radius: 0.5rem;
+                border: none;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+            }
 
-    .btn {
-      padding: 0.6rem 1.2rem;
-      border-radius: 0.5rem;
-      border: none;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
+            .btn-primary {
+                background-color: var(--accent-color);
+                color: #0f172a;
+            }
 
-    .btn-primary {
-      background-color: var(--accent-color);
-      color: #0f172a;
-    }
+            .btn-primary:hover {
+                background-color: #7dd3fc;
+                transform: translateY(-2px);
+            }
 
-    .btn-primary:hover {
-      background-color: #7dd3fc;
-      transform: translateY(-2px);
-    }
+            .btn-secondary {
+                background-color: #334155;
+                color: white;
+            }
 
-    .btn-secondary {
-      background-color: #334155;
-      color: white;
-    }
+            .btn-secondary:hover {
+                background-color: #475569;
+                transform: translateY(-2px);
+            }
 
-    .btn-secondary:hover {
-      background-color: #475569;
-      transform: translateY(-2px);
-    }
+            #status {
+                margin-top: 1rem;
+                font-size: 0.9rem;
+                color: var(--text-secondary);
+                padding: 0.5rem 1rem;
+                background: rgba(0, 0, 0, 0.2);
+                border-radius: 2rem;
+            }
 
-    #status {
-      margin-top: 1rem;
-      font-size: 0.9rem;
-      color: var(--text-secondary);
-      padding: 0.5rem 1rem;
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 2rem;
-    }
+            /* ROM Gallery Styles */
+            .archive-section {
+                width: 100%;
+                max-width: 1000px;
+                margin-top: 4rem;
+            }
 
-    /* ROM Gallery Styles */
-    .archive-section {
-      width: 100%;
-      max-width: 1000px;
-      margin-top: 4rem;
-    }
+            .archive-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 1.5rem;
+                border-bottom: 1px solid #334155;
+                padding-bottom: 0.5rem;
+            }
 
-    .archive-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1.5rem;
-      border-bottom: 1px solid #334155;
-      padding-bottom: 0.5rem;
-    }
+            .archive-header h2 {
+                font-size: 1.5rem;
+                margin: 0;
+            }
 
-    .archive-header h2 {
-      font-size: 1.5rem;
-      margin: 0;
-    }
+            .rom-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+                gap: 1.5rem;
+            }
 
-    .rom-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 1.5rem;
-    }
+            .rom-card {
+                background: var(--card-bg);
+                border-radius: 0.75rem;
+                overflow: hidden;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                cursor: pointer;
+                border: 1px solid rgba(255, 255, 255, 0.05);
+                display: flex;
+                flex-direction: column;
+            }
 
-    .rom-card {
-      background: var(--card-bg);
-      border-radius: 0.75rem;
-      overflow: hidden;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      cursor: pointer;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      display: flex;
-      flex-direction: column;
-    }
+            .rom-card:hover {
+                transform: translateY(-8px) scale(1.02);
+                border-color: var(--accent-color);
+                box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+            }
 
-    .rom-card:hover {
-      transform: translateY(-8px) scale(1.02);
-      border-color: var(--accent-color);
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
-    }
+            .rom-thumb-wrapper {
+                width: 100%;
+                aspect-ratio: 2/1;
+                background: #000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
+            }
 
-    .rom-thumb-wrapper {
-      width: 100%;
-      aspect-ratio: 2/1;
-      background: #000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-    }
+            .rom-thumb {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+                image-rendering: pixelated;
+            }
 
-    .rom-thumb {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      image-rendering: pixelated;
-    }
+            .rom-info {
+                padding: 0.75rem;
+                text-align: center;
+            }
 
-    .rom-info {
-      padding: 0.75rem;
-      text-align: center;
-    }
+            .rom-title {
+                font-size: 0.9rem;
+                font-weight: 600;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
 
-    .rom-title {
-      font-size: 0.9rem;
-      font-weight: 600;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+            /* Custom ROM section */
+            .hidden-input {
+                display: none;
+            }
+        </style>
+    </head>
 
-    /* Custom ROM section */
-    .hidden-input {
-      display: none;
-    }
-  </style>
-</head>
+    <body>
+        <h1>hachip</h1>
+        <div class="subtitle">WASM-powered CHIP-8 Emulator</div>
 
-<body>
-  <h1>hachip</h1>
-  <div class="subtitle">WASM-powered CHIP-8 Emulator</div>
+        <div id="emulator-container">
+            <canvas id="chip8-canvas"></canvas>
+        </div>
 
-  <div id="emulator-container">
-    <canvas id="chip8-canvas"></canvas>
-  </div>
+        <div id="controls">
+            <input
+                type="file"
+                id="rom-input"
+                class="hidden-input"
+                accept=".ch8"
+            />
+            <button id="load-rom-btn" class="btn btn-primary">
+                <span>📂</span> Load Custom ROM
+            </button>
+            <button id="reset-btn" class="btn btn-secondary">
+                <span>🔄</span> Reset
+            </button>
+        </div>
 
-  <div id="controls">
-    <input type="file" id="rom-input" class="hidden-input" accept=".ch8">
-    <button id="load-rom-btn" class="btn btn-primary">
-      <span>📂</span> Load Custom ROM
-    </button>
-    <button id="reset-btn" class="btn btn-secondary">
-      <span>🔄</span> Reset
-    </button>
-  </div>
+        <div id="status">Ready. Select a ROM below or upload your own.</div>
 
-  <div id="status">Ready. Select a ROM below or upload your own.</div>
+        <section class="archive-section">
+            <div class="archive-header">
+                <h2>ROM Collection</h2>
+                <span style="color: var(--text-secondary); font-size: 0.8rem"
+                    >Click to Play</span
+                >
+            </div>
+            <div id="rom-gallery" class="rom-grid">
+                <!-- ROMs injected here -->
+            </div>
+        </section>
 
-  <section class="archive-section">
-    <div class="archive-header">
-      <h2>ROM Collection</h2>
-      <span style="color: var(--text-secondary); font-size: 0.8rem;">Click to Play</span>
-    </div>
-    <div id="rom-gallery" class="rom-grid">
-      <!-- ROMs injected here -->
-    </div>
-  </section>
+        <script type="module">
+            import init, { Emulator, init_wasm } from "./pkg/hachip_core.js";
 
-  <script type="module">
-    import init, { Emulator, init_wasm } from './pkg/hachip_core.js';
+            const CANVAS_ID = "chip8-canvas";
+            const PIXEL_WIDTH = 64;
+            const PIXEL_HEIGHT = 32;
 
-    const CANVAS_ID = "chip8-canvas";
-    const PIXEL_WIDTH = 64;
-    const PIXEL_HEIGHT = 32;
+            let emulator = null;
+            let animationFrameId = null;
+            let wasm_memory = null;
 
-    let emulator = null;
-    let animationFrameId = null;
-    let wasm_memory = null;
+            const canvas = document.getElementById(CANVAS_ID);
+            const ctx = canvas.getContext("2d");
+            const romInput = document.getElementById("rom-input");
+            const loadRomBtn = document.getElementById("load-rom-btn");
+            const resetBtn = document.getElementById("reset-btn");
+            const statusDiv = document.getElementById("status");
+            const gallery = document.getElementById("rom-gallery");
 
-    const canvas = document.getElementById(CANVAS_ID);
-    const ctx = canvas.getContext('2d');
-    const romInput = document.getElementById('rom-input');
-    const loadRomBtn = document.getElementById('load-rom-btn');
-    const resetBtn = document.getElementById('reset-btn');
-    const statusDiv = document.getElementById('status');
-    const gallery = document.getElementById('rom-gallery');
+            canvas.width = PIXEL_WIDTH;
+            canvas.height = PIXEL_HEIGHT;
 
-    canvas.width = PIXEL_WIDTH;
-    canvas.height = PIXEL_HEIGHT;
+            // Octojam 1 Data
+            const OCTOJAM1_ROMS = [
+                {
+                    title: "RPS",
+                    thumb: "https://johnearnest.github.io/chip8Archive/src/RPS/rps_oj1.gif",
+                    url: "https://johnearnest.github.io/chip8Archive/roms/RPS.ch8",
+                },
+                {
+                    title: "Octo: a Chip 8 Story",
+                    thumb: "https://johnearnest.github.io/chip8Archive/src/octoachip8story/octoachip8story.gif",
+                    url: "https://johnearnest.github.io/chip8Archive/roms/octoachip8story.ch8",
+                },
+                {
+                    title: "Pumpkin Dress Up",
+                    thumb: "https://johnearnest.github.io/chip8Archive/src/pumpkindressup/pumpkindressup.gif",
+                    url: "https://johnearnest.github.io/chip8Archive/roms/pumpkindressup.ch8",
+                },
+                {
+                    title: "Rockto",
+                    thumb: "https://johnearnest.github.io/chip8Archive/src/rockto/rockto.gif",
+                    url: "https://johnearnest.github.io/chip8Archive/roms/rockto.ch8",
+                },
+                {
+                    title: "Flight Runner",
+                    thumb: "https://johnearnest.github.io/chip8Archive/src/flightrunner/flightrunner.gif",
+                    url: "https://johnearnest.github.io/chip8Archive/roms/flightrunner.ch8",
+                },
+                {
+                    title: "Turnover '77",
+                    thumb: "https://johnearnest.github.io/chip8Archive/src/turnover77/turnover.gif",
+                    url: "https://johnearnest.github.io/chip8Archive/roms/turnover77.ch8",
+                },
+                {
+                    title: "Ultimate Tic-tac-toe",
+                    thumb: "https://johnearnest.github.io/chip8Archive/src/ultimatetictactoe/tictac.gif",
+                    url: "https://johnearnest.github.io/chip8Archive/roms/ultimatetictactoe.ch8",
+                },
+                {
+                    title: "Super Square",
+                    thumb: "https://johnearnest.github.io/chip8Archive/src/supersquare/square.png",
+                    url: "https://johnearnest.github.io/chip8Archive/roms/supersquare.ch8",
+                },
+                {
+                    title: "Horse World Online",
+                    thumb: "https://johnearnest.github.io/chip8Archive/src/horseWorldOnline/title.gif",
+                    url: "https://johnearnest.github.io/chip8Archive/roms/horseWorldOnline.ch8",
+                },
+                {
+                    title: "Br8kout",
+                    thumb: "https://raw.githubusercontent.com/badlogic/chip8/refs/heads/master/roms/breakout.rom",
+                },
+                {
+                    title: "Snake",
+                    thumb: "https://johnearnest.github.io/chip8Archive/src/snake/snake.gif",
+                    url: "https://johnearnest.github.io/chip8Archive/roms/snake.ch8",
+                },
+            ];
 
-    // Octojam 1 Data
-    const OCTOJAM1_ROMS = [
-      { title: "RPS", thumb: "https://johnearnest.github.io/chip8Archive/src/RPS/rps_oj1.gif", url: "https://johnearnest.github.io/chip8Archive/roms/RPS.ch8" },
-      { title: "Octo: a Chip 8 Story", thumb: "https://johnearnest.github.io/chip8Archive/src/octoachip8story/octoachip8story.gif", url: "https://johnearnest.github.io/chip8Archive/roms/octoachip8story.ch8" },
-      { title: "Pumpkin Dress Up", thumb: "https://johnearnest.github.io/chip8Archive/src/pumpkindressup/pumpkindressup.gif", url: "https://johnearnest.github.io/chip8Archive/roms/pumpkindressup.ch8" },
-      { title: "Rockto", thumb: "https://johnearnest.github.io/chip8Archive/src/rockto/rockto.gif", url: "https://johnearnest.github.io/chip8Archive/roms/rockto.ch8" },
-      { title: "Flight Runner", thumb: "https://johnearnest.github.io/chip8Archive/src/flightrunner/flightrunner.gif", url: "https://johnearnest.github.io/chip8Archive/roms/flightrunner.ch8" },
-      { title: "Turnover '77", thumb: "https://johnearnest.github.io/chip8Archive/src/turnover77/turnover.gif", url: "https://johnearnest.github.io/chip8Archive/roms/turnover77.ch8" },
-      { title: "Ultimate Tic-tac-toe", thumb: "https://johnearnest.github.io/chip8Archive/src/ultimatetictactoe/tictac.gif", url: "https://johnearnest.github.io/chip8Archive/roms/ultimatetictactoe.ch8" },
-      { title: "Super Square", thumb: "https://johnearnest.github.io/chip8Archive/src/supersquare/square.png", url: "https://johnearnest.github.io/chip8Archive/roms/supersquare.ch8" },
-      { title: "Horse World Online", thumb: "https://johnearnest.github.io/chip8Archive/src/horseWorldOnline/title.gif", url: "https://johnearnest.github.io/chip8Archive/roms/horseWorldOnline.ch8" },
-      { title: "Br8kout", thumb: "https://johnearnest.github.io/chip8Archive/src/br8kout/breakout.gif", url: "https://johnearnest.github.io/chip8Archive/roms/br8kout.ch8" },
-      { title: "Snake", thumb: "https://johnearnest.github.io/chip8Archive/src/snake/snake.gif", url: "https://johnearnest.github.io/chip8Archive/roms/snake.ch8" }
-    ];
-
-    function renderGallery() {
-      gallery.innerHTML = OCTOJAM1_ROMS.map(rom => `
+            function renderGallery() {
+                gallery.innerHTML = OCTOJAM1_ROMS.map(
+                    (rom) => `
           <div class="rom-card" onclick="window.loadRemoteRom('${rom.url}', '${rom.title}')">
             <div class="rom-thumb-wrapper">
               <img src="${rom.thumb}" class="rom-thumb" alt="${rom.title}" loading="lazy">
@@ -267,142 +325,164 @@
               <div class="rom-title">${rom.title}</div>
             </div>
           </div>
-        `).join('');
-    }
+        `,
+                ).join("");
+            }
 
-    // Initial Setup
-    ctx.fillStyle = 'black';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // Initial Setup
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    async function run() {
-      const wasm_exports = await init();
-      wasm_memory = wasm_exports.memory;
-      init_wasm();
-      statusDiv.textContent = "WASM module ready.";
-      emulator = new Emulator();
-      renderGallery();
-    }
+            async function run() {
+                const wasm_exports = await init();
+                wasm_memory = wasm_exports.memory;
+                init_wasm();
+                statusDiv.textContent = "WASM module ready.";
+                emulator = new Emulator();
+                renderGallery();
+            }
 
-    window.loadRemoteRom = async (url, title) => {
-      statusDiv.textContent = `Downloading ${title}...`;
-      try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("Failed to fetch ROM");
-        const buffer = await response.arrayBuffer();
-        const romData = new Uint8Array(buffer);
+            window.loadRemoteRom = async (url, title) => {
+                statusDiv.textContent = `Downloading ${title}...`;
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error("Failed to fetch ROM");
+                    const buffer = await response.arrayBuffer();
+                    const romData = new Uint8Array(buffer);
 
-        if (emulator) {
-          emulator.load_rom(romData);
-          statusDiv.textContent = `Running: ${title}`;
-          startEmulatorLoop();
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-      } catch (err) {
-        statusDiv.textContent = `Error: ${err.message}`;
-      }
-    };
+                    if (emulator) {
+                        emulator.load_rom(romData);
+                        statusDiv.textContent = `Running: ${title}`;
+                        startEmulatorLoop();
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                    }
+                } catch (err) {
+                    statusDiv.textContent = `Error: ${err.message}`;
+                }
+            };
 
-    function startEmulatorLoop() {
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
+            function startEmulatorLoop() {
+                if (animationFrameId) {
+                    cancelAnimationFrame(animationFrameId);
+                }
 
-      let lastWidth = 0;
-      let lastHeight = 0;
-      let imageData = null;
-      let imageDataArray = null;
+                let lastWidth = 0;
+                let lastHeight = 0;
+                let imageData = null;
+                let imageDataArray = null;
 
-      const render = () => {
-        for (let i = 0; i < 16; i++) {
-          emulator.tick();
-        }
-        emulator.tick_timers();
+                const render = () => {
+                    for (let i = 0; i < 16; i++) {
+                        emulator.tick();
+                    }
+                    emulator.tick_timers();
 
-        if (emulator.display_updated()) {
-          const displayWidth = emulator.get_display_width();
-          const displayHeight = emulator.get_display_height();
+                    if (emulator.display_updated()) {
+                        const displayWidth = emulator.get_display_width();
+                        const displayHeight = emulator.get_display_height();
 
-          if (displayWidth !== lastWidth || displayHeight !== lastHeight) {
-            canvas.width = displayWidth;
-            canvas.height = displayHeight;
-            imageData = ctx.createImageData(displayWidth, displayHeight);
-            imageDataArray = imageData.data;
-            lastWidth = displayWidth;
-            lastHeight = displayHeight;
-          }
+                        if (
+                            displayWidth !== lastWidth ||
+                            displayHeight !== lastHeight
+                        ) {
+                            canvas.width = displayWidth;
+                            canvas.height = displayHeight;
+                            imageData = ctx.createImageData(
+                                displayWidth,
+                                displayHeight,
+                            );
+                            imageDataArray = imageData.data;
+                            lastWidth = displayWidth;
+                            lastHeight = displayHeight;
+                        }
 
-          const displayPtr = emulator.get_display_ptr();
-          const displayMemory = new Uint8Array(wasm_memory.buffer, displayPtr, displayWidth * displayHeight);
+                        const displayPtr = emulator.get_display_ptr();
+                        const displayMemory = new Uint8Array(
+                            wasm_memory.buffer,
+                            displayPtr,
+                            displayWidth * displayHeight,
+                        );
 
-          for (let i = 0; i < displayWidth * displayHeight; i++) {
-            const pixelState = displayMemory[i];
-            const offset = i * 4;
-            const val = pixelState === 1 ? 255 : 0;
+                        for (let i = 0; i < displayWidth * displayHeight; i++) {
+                            const pixelState = displayMemory[i];
+                            const offset = i * 4;
+                            const val = pixelState === 1 ? 255 : 0;
 
-            imageDataArray[offset + 0] = val;
-            imageDataArray[offset + 1] = val;
-            imageDataArray[offset + 2] = val;
-            imageDataArray[offset + 3] = 255;
-          }
-          ctx.putImageData(imageData, 0, 0);
-        }
-        animationFrameId = requestAnimationFrame(render);
-      };
-      animationFrameId = requestAnimationFrame(render);
-    }
+                            imageDataArray[offset + 0] = val;
+                            imageDataArray[offset + 1] = val;
+                            imageDataArray[offset + 2] = val;
+                            imageDataArray[offset + 3] = 255;
+                        }
+                        ctx.putImageData(imageData, 0, 0);
+                    }
+                    animationFrameId = requestAnimationFrame(render);
+                };
+                animationFrameId = requestAnimationFrame(render);
+            }
 
-    function handleRomLoad(event) {
-      const file = event.target.files[0];
-      if (!file) return;
+            function handleRomLoad(event) {
+                const file = event.target.files[0];
+                if (!file) return;
 
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const romData = new Uint8Array(e.target.result);
-        if (emulator) {
-          emulator.load_rom(romData);
-          statusDiv.textContent = `Loaded: ${file.name}`;
-          startEmulatorLoop();
-        }
-      };
-      reader.readAsArrayBuffer(file);
-    }
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const romData = new Uint8Array(e.target.result);
+                    if (emulator) {
+                        emulator.load_rom(romData);
+                        statusDiv.textContent = `Loaded: ${file.name}`;
+                        startEmulatorLoop();
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            }
 
-    function handleReset() {
-      if (emulator) {
-        emulator.reset();
-        statusDiv.textContent = "Emulator reset.";
-      }
-    }
+            function handleReset() {
+                if (emulator) {
+                    emulator.reset();
+                    statusDiv.textContent = "Emulator reset.";
+                }
+            }
 
-    const keymap = {
-      '1': 0x1, '2': 0x2, '3': 0x3, '4': 0xc,
-      'q': 0x4, 'w': 0x5, 'e': 0x6, 'r': 0xd,
-      'a': 0x7, 's': 0x8, 'd': 0x9, 'f': 0xe,
-      'z': 0xa, 'x': 0x0, 'c': 0xb, 'v': 0xf,
-    };
+            const keymap = {
+                1: 0x1,
+                2: 0x2,
+                3: 0x3,
+                4: 0xc,
+                q: 0x4,
+                w: 0x5,
+                e: 0x6,
+                r: 0xd,
+                a: 0x7,
+                s: 0x8,
+                d: 0x9,
+                f: 0xe,
+                z: 0xa,
+                x: 0x0,
+                c: 0xb,
+                v: 0xf,
+            };
 
-    document.addEventListener('keydown', (e) => {
-      const chip8Key = keymap[e.key.toLowerCase()];
-      if (chip8Key !== undefined && emulator) {
-        emulator.set_key_state(chip8Key, true);
-        e.preventDefault();
-      }
-    });
+            document.addEventListener("keydown", (e) => {
+                const chip8Key = keymap[e.key.toLowerCase()];
+                if (chip8Key !== undefined && emulator) {
+                    emulator.set_key_state(chip8Key, true);
+                    e.preventDefault();
+                }
+            });
 
-    document.addEventListener('keyup', (e) => {
-      const chip8Key = keymap[e.key.toLowerCase()];
-      if (chip8Key !== undefined && emulator) {
-        emulator.set_key_state(chip8Key, false);
-        e.preventDefault();
-      }
-    });
+            document.addEventListener("keyup", (e) => {
+                const chip8Key = keymap[e.key.toLowerCase()];
+                if (chip8Key !== undefined && emulator) {
+                    emulator.set_key_state(chip8Key, false);
+                    e.preventDefault();
+                }
+            });
 
-    loadRomBtn.addEventListener('click', () => romInput.click());
-    romInput.addEventListener('change', handleRomLoad);
-    resetBtn.addEventListener('click', handleReset);
+            loadRomBtn.addEventListener("click", () => romInput.click());
+            romInput.addEventListener("change", handleRomLoad);
+            resetBtn.addEventListener("click", handleReset);
 
-    run();
-  </script>
-</body>
-
+            run();
+        </script>
+    </body>
 </html>
